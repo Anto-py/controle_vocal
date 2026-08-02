@@ -43,7 +43,7 @@ class Micro:
         taille_bloc: int = TAILLE_BLOC,
     ) -> None:
         self.taux = taux
-        self.peripherique = peripherique
+        self.peripherique = resoudre_peripherique(peripherique)
         self.taille_bloc = taille_bloc
         self._blocs: queue.Queue[bytes] = queue.Queue()
         self._incident: str | None = None
@@ -88,6 +88,21 @@ class Micro:
                     "il a peut-être été débranché"
                 ) from erreur
             yield bloc
+
+
+def resoudre_peripherique(valeur: str | int | None) -> int | str | None:
+    """Traduit ce que la ligne de commande donne en ce que `sounddevice` attend.
+
+    Un index arrive de `argparse` sous forme de chaîne, et `sounddevice` cherche
+    alors un périphérique dont le *nom* vaut « 1 », qu'il ne trouve jamais. Un
+    nom partiel reste accepté tel quel : « MacBook » suffit.
+    """
+    if valeur is None or isinstance(valeur, int):
+        return valeur
+    valeur = valeur.strip()
+    if not valeur:
+        return None
+    return int(valeur) if valeur.lstrip("-").isdigit() else valeur
 
 
 def peripheriques() -> list[dict]:

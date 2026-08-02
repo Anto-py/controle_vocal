@@ -46,6 +46,16 @@ class Enonce:
     def vide(self) -> bool:
         return not self.texte or self.texte == TEXTE_INCONNU
 
+    @property
+    def plancher(self) -> float:
+        """Score du mot le plus faible, sur quoi porte le seuil de la décision.
+
+        Mesuré à la voix le 2026-08-02 : la moyenne laisse un mot sûr racheter un
+        mot douteux, et c'est ainsi qu'un « higgins pause » fabriqué à partir d'une
+        phrase de cours est passé à 0,82. Un énoncé ne vaut que son maillon faible.
+        """
+        return min((score for _, score in self.mots), default=self.certitude)
+
     def __str__(self) -> str:
         detail = "  ".join(f"{mot} {score:.2f}" for mot, score in self.mots)
         return f"« {self.texte} »  certitude {self.certitude:.2f}   [{detail}]"
