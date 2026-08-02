@@ -61,7 +61,9 @@ SOURCE_LANCEUR = Path(__file__).resolve().parent / "lanceur.c"
 LISEZ_MOI = """Contrôle vocal, télécommande vocale pour présentations
 =====================================================
 
-Installation, trois gestes.
+Installation, trois gestes, dans cet ordre. Ne pas double-cliquer avant le
+geste 2 : macOS refuserait l'ouverture, et son bouton par défaut, le vert,
+propose de placer l'application dans la corbeille.
 
 1. Glisser « {nom}.app » dans le dossier Applications.
 
@@ -72,17 +74,30 @@ Installation, trois gestes.
 
 xattr -dr com.apple.quarantine "/Applications/{nom}.app"
 
-   Sans cette ligne, le double-clic répond que l'application est endommagée.
-   Elle ne l'est pas : macOS dit cela de toute application non signée par un
-   compte payant, et c'est le cas de celle-ci, distribuée de la main à la main.
+   Sans cette ligne, le double-clic répond que l'élément n'a pas été ouvert,
+   Apple n'ayant pas pu confirmer l'absence de logiciel malveillant. Il n'y en
+   a pas : macOS dit cela de toute application non signée par un compte payant,
+   et c'est le cas de celle-ci, distribuée de la main à la main. Si le message
+   est déjà apparu, répondre « Terminé », surtout pas le bouton vert.
 
 3. Double-cliquer sur l'application. Une page de réglages s'ouvre dans le
    navigateur. Elle demande deux autorisations, à accorder dans Réglages
    système, Confidentialité et sécurité :
 
    - Accessibilité, pour envoyer les touches à l'application projetée. Sans
-     elle, l'outil écoute et ne fait rien.
+     elle, l'outil écoute et ne fait rien. Une fois cochée, quitter et rouvrir
+     l'application : l'autorisation n'est lue qu'au lancement, et tant qu'on ne
+     l'a pas fait, la page continue de l'annoncer absente. Quitter passe par le
+     bouton « Fermer les réglages » de la page : redouble-cliquer sur l'icône
+     ne relance rien, l'application déjà en marche se contente alors de
+     ramener sa page au premier plan.
    - Micro, demandé au premier démarrage de l'écoute.
+
+Sur une mise à jour, l'application peut figurer dans le panneau Accessibilité,
+cochée, sans être autorisée pour autant : faute de certificat, son identité est
+le condensé de son binaire, que toute nouvelle version change, quand le panneau
+n'affiche qu'un nom et un chemin. Le remède est de sélectionner la ligne,
+la retirer avec le bouton moins, puis de la réaccorder depuis la page.
 
 Tout se passe sur la machine : aucun son ne part sur le réseau, et l'outil
 fonctionne sans connexion.
@@ -320,14 +335,29 @@ def signer(app: Path, autonome: bool) -> bool:
     signature ad hoc donnée de la main à la main, qui ne prétend à aucune
     garantie d'origine.
 
+    **L'interpréteur embarqué se signe à part, et avant le bundle.** `--deep` ne
+    resigne que le code imbriqué qu'il reconnaît, frameworks et bibliothèques ;
+    un exécutable rangé dans `Resources/` n'est pour lui qu'une ressource à
+    sceller, et il garde la signature anonyme (`Identifier=-`) que lui a donnée
+    python-build-standalone. Or c'est ce binaire-là qui tourne et qui interroge
+    l'Accessibilité : sans identifiant commun avec l'app, macOS ne peut pas lui
+    appliquer l'autorisation accordée à celle-ci, et le panneau affiche une case
+    cochée pendant que les touches partent dans le vide. Trouvé à l'installation,
+    invisible à la lecture comme aux tests.
+
     Une identité ad hoc est le condensé du binaire : refabriquer l'application
     en change, et macOS redemande alors l'autorisation Accessibilité. C'est le
     prix de l'absence de certificat, et il se paie à chaque mise à jour.
     """
-    commande = ["codesign", "--force", "--sign", "-", "--identifier", IDENTIFIANT]
+    interne = ["codesign", "--force", "--sign", "-", "--identifier", IDENTIFIANT]
+    commande = list(interne)
     if autonome:
         commande.append("--deep")
     try:
+        if autonome:
+            interprete = app / "Contents" / "Resources" / "python" / "bin" / f"python{PYTHON}"
+            if interprete.exists():
+                subprocess.run([*interne, str(interprete)], check=True, capture_output=True)
         subprocess.run([*commande, str(app)], check=True, capture_output=True)
     except (OSError, subprocess.CalledProcessError) as erreur:
         details = getattr(erreur, "stderr", b"") or b""

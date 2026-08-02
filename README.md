@@ -156,7 +156,9 @@ Le lanceur est compilé pour les deux architectures, mais l'interpréteur embarq
 xattr -dr com.apple.quarantine "/Applications/Contrôle vocal.app"
 ```
 
-Cette ligne est le péage d'une distribution de la main à la main. macOS marque tout fichier venu d'ailleurs, et refuse d'ouvrir une application qui n'est pas signée par un compte de développeur Apple, payant. Il annonce alors une application « endommagée », ce qu'elle n'est pas. Un certificat Developer ID et la notarisation supprimeraient cette étape ; ce projet ne les a pas.
+Cette ligne est le péage d'une distribution de la main à la main. macOS marque tout fichier venu d'ailleurs, et refuse d'ouvrir une application qui n'est pas signée par un compte de développeur Apple, payant. Sur macOS 26, il annonce un élément « non ouvert », dont Apple n'a pas pu confirmer qu'il ne contenait pas de logiciel malveillant. Il n'en contient pas. Attention au bouton par défaut de cette alerte, le vert, qui propose de placer l'application dans la corbeille : répondre « Terminé ». Un certificat Developer ID et la notarisation supprimeraient cette étape ; ce projet ne les a pas.
+
+**L'autorisation n'est lue qu'au lancement.** Une fois la case cochée dans le panneau Accessibilité, quitter et rouvrir l'application : le verdict est figé pour la durée du processus, et la page continue sinon d'annoncer l'autorisation absente. Quitter passe par le bouton « Fermer les réglages » ; redouble-cliquer sur l'icône ne relance rien, une application déjà en marche ramenant seulement sa page au premier plan.
 
 **Où vont les profils.** L'application ne modifie jamais son propre contenu, sous peine d'invalider sa signature et l'autorisation qu'elle porte. Les CSV sont donc copiés au premier lancement dans le dossier personnel, et c'est là que l'interface les édite. Le chemin est rappelé sous la liste des profils.
 
@@ -166,7 +168,7 @@ Cette ligne est le péage d'une distribution de la main à la main. macOS marque
 
 Une nouvelle version de l'application n'y touche pas : un profil déjà présent n'est jamais remplacé par celui d'origine. En contrepartie, un gabarit amélioré n'atteint pas qui a déjà le sien, et se récupère par le bouton d'import.
 
-Une limite à connaître avant de distribuer : sans certificat, l'identité de l'application est le condensé de son binaire. Toute nouvelle version en change, et macOS redemande alors l'autorisation Accessibilité.
+Une limite à connaître avant de distribuer : sans certificat, l'identité de l'application est le condensé de son binaire. Toute nouvelle version en change, et l'autorisation Accessibilité est à réaccorder. Le piège est que macOS ne la redemande pas : le panneau n'affiche qu'un nom et un chemin, inchangés, si bien que l'entrée héritée de la version précédente reste cochée sans plus rien couvrir. Retirer la ligne avec le bouton moins, puis la réaccorder depuis la page de réglages.
 
 ## Ce qui protège des déclenchements non voulus
 

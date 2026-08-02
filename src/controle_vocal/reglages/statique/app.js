@@ -418,9 +418,13 @@ async function relireAutorisation() {
   }
   bloc.hidden = false;
   bloc.classList.toggle("manquante", !charge.accordee);
+  /* La consigne de relance est portée par le bandeau permanent, et pas
+   * seulement par celui qui suit la demande : le verdict est figé pour la durée
+   * du processus, si bien qu'une autorisation qu'on vient de cocher continue de
+   * s'afficher absente. Sans cette phrase, on croit la case sans effet. */
   $("autorisation-texte").textContent = charge.accordee
     ? "Autorisation Accessibilité accordée : les touches peuvent partir."
-    : "Autorisation Accessibilité absente : la télécommande démarrera, mais aucune touche ne partira.";
+    : "Autorisation Accessibilité absente : la télécommande démarrera, mais aucune touche ne partira. Si elle vient d'être cochée dans les Réglages système, fermer les réglages par le bouton ci-dessous, puis rouvrir l'application : l'autorisation n'est lue qu'au lancement, et redouble-cliquer sur l'icône ne relance rien.";
   $("autorisation-demander").hidden = charge.accordee;
 }
 
