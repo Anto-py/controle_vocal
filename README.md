@@ -24,6 +24,8 @@ unzip -q modeles/fr.zip -d modeles && rm modeles/fr.zip
 
 ## Usage
 
+Depuis le dossier du projet, sans quoi `uv` cherche un projet là où vous êtes et retombe sur le Python du système. Pour lancer d'ailleurs, ajouter `--directory <chemin du projet>` après `uv run`.
+
 ```sh
 # Envoyer une touche, trois secondes pour basculer sur la fenêtre visée
 uv run -m controle_vocal.clavier --delai 3 droite
