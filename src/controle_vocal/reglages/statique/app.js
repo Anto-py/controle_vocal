@@ -11,8 +11,9 @@ const COLONNES = ["application", "bundle_id", "commande", "touches", "phrases", 
 const etat = {
   profil: null,
   lignes: [],
-  touches: { touches: [], modificateurs: [], actions: [] },
+  touches: { touches: [], modificateurs: [] },
   moteur: { actif: false },
+  actions: { lignes: [], libelles: {}, toujours_actives: [] },
 };
 
 /* Rythme de relecture de l'état de la télécommande. Deux secondes suffisent :
@@ -119,11 +120,12 @@ function rendreTable() {
     supprimer.type = "button";
     supprimer.className = "supprimer";
     supprimer.textContent = "✕";
+    // Une ligne interne restée d'un ancien profil sera refusée à l'enregistrement :
+    // il faut donc pouvoir la supprimer, plus la protéger comme autrefois.
     supprimer.title = interne
-      ? "Les actions internes se désactivent, elles ne se suppriment pas"
+      ? "Cette action se règle dans les mots de l'outil : retirer la ligne"
       : "Supprimer la ligne";
     supprimer.setAttribute("aria-label", `Supprimer ${ligne.commande || "la ligne"}`);
-    supprimer.disabled = interne;
     supprimer.addEventListener("click", () => {
       etat.lignes.splice(index, 1);
       rendreTable();
@@ -142,9 +144,10 @@ function rendreTouchesConnues() {
     liste.id = "touches-connues";
     document.body.append(liste);
   }
-  const valeurs = [...etat.touches.touches, ...(etat.touches.actions || [])];
+  // Les actions internes n'y figurent pas : elles ne s'écrivent plus dans un
+  // profil, et les proposer ici mènerait droit à un refus.
   liste.replaceChildren(
-    ...valeurs.map((valeur) => {
+    ...etat.touches.touches.map((valeur) => {
       const option = document.createElement("option");
       option.value = valeur;
       return option;
@@ -152,8 +155,8 @@ function rendreTouchesConnues() {
   );
 }
 
-function afficherBandeau(classe, titre, details = []) {
-  const bandeau = $("bandeau");
+function afficherBandeau(classe, titre, details = [], cible = "bandeau") {
+  const bandeau = $(cible);
   bandeau.className = `bandeau ${classe}`;
   bandeau.replaceChildren();
 
@@ -191,6 +194,140 @@ function marquerRefus(refus) {
       note.textContent = r.message;
       cellule.parentElement.append(note);
     }
+  }
+}
+
+// --- Les mots de l'outil ----------------------------------------------------
+
+/* Le mot de réveil, la pause, la reprise et l'extinction valent pour tous les
+ * profils : ils règlent la télécommande, pas l'application. Ils ont donc leur
+ * fichier, leur route, et ce bloc à eux, au lieu d'être noyés dans la table des
+ * commandes où rien ne disait qu'on pouvait les changer. */
+
+function champAction(ligne, index) {
+  const libelle = etat.actions.libelles[ligne.action] || {};
+  const fixe = (etat.actions.toujours_actives || []).includes(ligne.action);
+
+  const bloc = document.createElement("div");
+  bloc.className = "champ-action";
+  bloc.dataset.index = String(index);
+
+  const etiquette = document.createElement("label");
+  etiquette.className = "option";
+  const titre = document.createElement("span");
+  titre.className = "retro-label";
+  titre.textContent = libelle.titre || ligne.action;
+
+  const entree = document.createElement("input");
+  entree.className = "retro-input";
+  entree.type = "text";
+  entree.value = ligne.phrases || "";
+  entree.dataset.colonne = "phrases";
+  entree.addEventListener("input", () => {
+    etat.actions.lignes[index].phrases = entree.value;
+  });
+  etiquette.append(titre, entree);
+
+  const note = document.createElement("p");
+  note.className = "note";
+  note.textContent = libelle.detail || "";
+
+  bloc.append(etiquette, note);
+
+  // L'extinction et le mot de réveil ne s'éteignent pas : sans le premier on ne
+  // peut plus arrêter l'outil à la voix, sans le second la moindre phrase de
+  // cours agirait. Leur case n'est donc pas affichée du tout.
+  if (!fixe) {
+    const case_ = document.createElement("label");
+    case_.className = "option-case";
+    const bouton = document.createElement("input");
+    bouton.type = "checkbox";
+    bouton.className = "case-actif";
+    bouton.checked = ["oui", "o", "vrai", "1", "true"].includes(
+      (ligne.actif || "").trim().toLowerCase(),
+    );
+    bouton.addEventListener("change", () => {
+      etat.actions.lignes[index].actif = bouton.checked ? "oui" : "non";
+    });
+    const texte = document.createElement("span");
+    texte.textContent = "Active";
+    case_.append(bouton, texte);
+    bloc.append(case_);
+  }
+
+  return bloc;
+}
+
+function rendreActions() {
+  $("champs-actions").replaceChildren(
+    ...etat.actions.lignes.map((ligne, index) => champAction(ligne, index)),
+  );
+}
+
+function marquerRefusActions(refus) {
+  document.querySelectorAll(".champ-action").forEach((bloc) => {
+    bloc.classList.remove("fautive");
+    bloc.querySelector(".retro-input")?.classList.remove("error");
+    bloc.querySelector(".refus-ligne")?.remove();
+  });
+
+  for (const r of refus) {
+    // La ligne 2 du fichier est la première ligne de données.
+    const bloc = document.querySelector(`.champ-action[data-index="${r.ligne - 2}"]`);
+    if (!bloc) continue;
+    bloc.classList.add("fautive");
+    bloc.querySelector(".retro-input")?.classList.add("error");
+    const note = document.createElement("span");
+    note.className = "refus-ligne";
+    note.textContent = r.message;
+    bloc.append(note);
+  }
+}
+
+async function chargerActions() {
+  const { ok, charge } = await demander("/api/actions");
+  if (!ok) {
+    return afficherBandeau(
+      "echec",
+      "Mots de l'outil illisibles.",
+      [charge.erreur || ""],
+      "bandeau-actions",
+    );
+  }
+  etat.actions = charge;
+  rendreActions();
+}
+
+async function enregistrerActions() {
+  const bouton = $("enregistrer-actions");
+  bouton.disabled = true;
+  try {
+    const { ok, charge } = await demander("/api/actions", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lignes: etat.actions.lignes }),
+    });
+
+    if (ok) {
+      marquerRefusActions([]);
+      return afficherBandeau(
+        "succes",
+        "Mots de l'outil enregistrés.",
+        ["Redémarrer la télécommande pour qu'elle les entende."],
+        "bandeau-actions",
+      );
+    }
+
+    const refus = charge.refus || [{ ligne: 0, colonne: "", message: charge.erreur }];
+    marquerRefusActions(refus);
+    afficherBandeau(
+      "echec",
+      "Rien n'a été écrit, le fichier est intact.",
+      refus.map((r) => r.message),
+      "bandeau-actions",
+    );
+  } finally {
+    bouton.disabled = false;
   }
 }
 
@@ -351,6 +488,10 @@ function remplirChoixProfils(profils) {
 async function chargerListe() {
   const { ok, charge } = await demander("/api/profils");
   if (!ok) return afficherBandeau("echec", "Liste des profils illisible.");
+  // Installée en application, l'interface édite des CSV rangés dans la
+  // bibliothèque de l'utilisateur : sans ce rappel, personne ne les retrouve
+  // pour les sauvegarder ou les passer à un collègue.
+  if (charge.dossier) $("dossier-profils").textContent = charge.dossier;
   rendreListeProfils(charge.profils);
   remplirChoixProfils(charge.profils);
   if (!etat.profil && charge.profils.length) {
@@ -386,7 +527,8 @@ async function enregistrer() {
   if (ok) {
     marquerRefus([]);
     afficherBandeau("succes", `Profil « ${etat.profil} » enregistré.`, [
-      "L'outil relit ses profils à chaque changement d'application : rien à redémarrer.",
+      "Redémarrer la télécommande pour qu'elle le prenne : elle lit ses fichiers "
+        + "au lancement, et garde en mémoire ce qu'elle y a trouvé.",
     ]);
     return chargerListe();
   }
@@ -441,6 +583,7 @@ async function demarrer() {
   rendreTouchesConnues();
 
   $("enregistrer").addEventListener("click", enregistrer);
+  $("enregistrer-actions").addEventListener("click", enregistrerActions);
   $("ajouter").addEventListener("click", ajouterLigne);
   $("interrupteur").addEventListener("click", basculerMoteur);
   $("fermer").addEventListener("click", fermerReglages);
@@ -451,6 +594,7 @@ async function demarrer() {
     evenement.target.value = "";
   });
 
+  await chargerActions();
   await chargerListe();
   await relireMoteur();
   await relireAutorisation();

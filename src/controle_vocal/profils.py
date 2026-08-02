@@ -2,58 +2,54 @@
 
 Un profil associe des formulations parlées à des combinaisons de touches, pour une
 application donnée. Le format des colonnes est fixé dans SPECS.md.
+
+Un profil ne porte plus que ce qui dépend de son application. Le mot de réveil, la
+pause, la reprise et l'extinction se règlent pour tout l'outil dans `_actions.csv`
+(`actions.py`), et un profil qui les déclarerait encore est refusé plutôt
+qu'ignoré : une ligne sans effet se découvrirait au pire moment.
 """
 
 from __future__ import annotations
 
-import csv
-import io
-import os
-import tempfile
-import unicodedata
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
+from controle_vocal import actions as module_actions
+from controle_vocal import tableaux
+from controle_vocal.tableaux import Refus, normaliser
+
 COLONNES = ("application", "bundle_id", "commande", "touches", "phrases", "actif")
-SEPARATEUR_PHRASES = "|"
+SEPARATEUR_PHRASES = tableaux.SEPARATEUR_PHRASES
 PREFIXE_ACTION_INTERNE = "@"
 
 #: Jeton Vosk qui absorbe tout ce qui n'est pas dans la grammaire.
 JETON_INCONNU = "[unk]"
 
-#: Action réservée qui porte les formulations du mot de réveil, pas une commande.
-ACTION_REVEIL = "@reveil"
-MOT_REVEIL_PAR_DEFAUT = "higgins"
+#: Profil traité en premier par la reprise : c'est celui que tout le monde a.
+PROFIL_DE_REPLI = "defaut"
 
-#: Actions internes garanties dans tout profil : elles ne dépendent d'aucune
-#: application, et `@quitter` est le coupe-circuit du critère de succès n°4.
-#: Un profil qui les omet se les voit ajoutées au chargement ; un profil qui les
-#: déclare garde ses propres formulations.
-ACTIONS_GARANTIES = {
-    "@pause": ("pause", "silence"),
-    "@reprise": ("reprise", "reprends"),
-    "@quitter": ("extinction",),
-}
+__all__ = [
+    "COLONNES",
+    "Commande",
+    "ErreurProfil",
+    "Profil",
+    "Refus",
+    "charger",
+    "charger_tous",
+    "ecrire",
+    "est_actif",
+    "lire_lignes",
+    "normaliser",
+    "profil_pour_bundle",
+    "rendre_csv",
+    "reprendre_actions",
+    "valider",
+]
 
-#: Toutes les valeurs admises dans la colonne `touches` avec le préfixe `@`. Une
-#: action inventée y échoue à la validation plutôt que de rester sans effet.
-ACTIONS_RESERVEES = frozenset(ACTIONS_GARANTIES) | {ACTION_REVEIL}
 
-
-class ErreurProfil(Exception):
+class ErreurProfil(tableaux.ErreurTableau):
     """Profil illisible ou incohérent : colonnes absentes, phrase en double."""
-
-
-def normaliser(phrase: str) -> str:
-    """Ramène une formulation à la forme que Vosk restitue : minuscules, espaces
-    simples, sans ponctuation. Les accents sont conservés, le modèle français les rend."""
-    sans_ponctuation = "".join(
-        caractere
-        for caractere in phrase.casefold()
-        if not unicodedata.category(caractere).startswith("P")
-    )
-    return " ".join(sans_ponctuation.split())
 
 
 @dataclass(frozen=True)
@@ -78,6 +74,25 @@ class Commande:
         return self.actif and bool(self.touches)
 
 
+def _commandes_internes(jeu: module_actions.Jeu) -> tuple[Commande, ...]:
+    """Traduit les actions internes en commandes, pour que la suite de la chaîne
+    n'ait qu'un seul type d'objet à connaître.
+
+    Le mot de réveil n'en est pas : il précède les commandes, il n'en est pas une.
+    """
+    return tuple(
+        Commande(
+            application="",
+            bundle_id="",
+            nom=action.nom.removeprefix(PREFIXE_ACTION_INTERNE),
+            touches=action.nom,
+            phrases=action.phrases,
+            actif=True,
+        )
+        for action in jeu.utilisables
+    )
+
+
 @dataclass(frozen=True)
 class Profil:
     """Un fichier CSV chargé en mémoire, prêt à nourrir la grammaire et la décision."""
@@ -85,6 +100,7 @@ class Profil:
     nom: str
     chemin: Path
     commandes: tuple[Commande, ...]
+    actions: module_actions.Jeu = field(default_factory=module_actions.charger)
 
     @property
     def application(self) -> str:
@@ -99,18 +115,15 @@ class Profil:
 
     @property
     def mots_reveil(self) -> tuple[str, ...]:
-        """Formulations acceptées pour le mot de réveil. Le modèle français rend
-        `Higgins` sous plusieurs graphies : la liste se complète à l'oreille."""
-        for commande in self.commandes:
-            if commande.touches == ACTION_REVEIL and commande.actif:
-                return commande.phrases
-        return (MOT_REVEIL_PAR_DEFAUT,)
+        """Formulations acceptées pour le mot de réveil, réglées pour tout l'outil."""
+        return self.actions.mots_reveil
 
     @property
     def commandes_utilisables(self) -> tuple[Commande, ...]:
-        """Commandes qui peuvent réellement agir, mot de réveil exclu."""
-        return tuple(
-            c for c in self.commandes if c.utilisable and c.touches != ACTION_REVEIL
+        """Commandes qui peuvent réellement agir : celles du fichier, plus les
+        actions internes communes à tous les profils."""
+        return tuple(c for c in self.commandes if c.utilisable) + _commandes_internes(
+            self.actions
         )
 
     def phrases_acceptees(self) -> tuple[str, ...]:
@@ -143,49 +156,46 @@ class Profil:
         return sorted(dict.fromkeys(enonces)) + [JETON_INCONNU]
 
 
-def _vrai_faux(valeur: str) -> bool:
-    return valeur.strip().casefold() in {"oui", "o", "true", "1", "vrai"}
+def charger(chemin: str | Path, jeu: module_actions.Jeu | None = None) -> Profil:
+    """Charge un profil depuis son CSV. Le nom du profil est celui du fichier.
 
-
-def charger(chemin: str | Path) -> Profil:
-    """Charge un profil depuis son CSV. Le nom du profil est celui du fichier."""
+    `jeu` évite de relire le fichier d'actions pour chaque profil ; omis, il est lu
+    dans le dossier du profil.
+    """
     chemin = Path(chemin)
     try:
-        texte = chemin.read_text(encoding="utf-8")
-    except OSError as erreur:
-        raise ErreurProfil(f"profil illisible : {chemin}") from erreur
+        lignes = tableaux.lire_lignes(chemin, COLONNES)
+    except tableaux.ErreurTableau as erreur:
+        raise ErreurProfil(str(erreur)) from erreur
 
-    lecteur = csv.DictReader(texte.splitlines())
-    manquantes = set(COLONNES) - set(lecteur.fieldnames or ())
-    if manquantes:
-        raise ErreurProfil(
-            f"{chemin.name} : colonnes absentes {sorted(manquantes)}, "
-            f"attendues {list(COLONNES)}"
-        )
+    if jeu is None:
+        jeu = module_actions.charger(module_actions.chemin(chemin.parent))
 
     commandes: list[Commande] = []
-    deja_vues: dict[str, str] = {}
-    for numero, ligne in enumerate(lecteur, start=2):
-        nom = (ligne["commande"] or "").strip()
+    deja_vues = jeu.phrases_prises()
+    for numero, ligne in enumerate(lignes, start=2):
+        nom = ligne["commande"].strip()
         if not nom:
             continue
-        phrases = tuple(
-            dict.fromkeys(
-                normaliser(p)
-                for p in (ligne["phrases"] or "").split(SEPARATEUR_PHRASES)
-                if normaliser(p)
+
+        touches = ligne["touches"].strip()
+        if touches.startswith(PREFIXE_ACTION_INTERNE):
+            raise ErreurProfil(
+                f"{chemin.name} ligne {numero} : « {touches} » se règle pour tout "
+                f"l'outil dans {module_actions.FICHIER}, plus profil par profil. "
+                "Retirer cette ligne."
             )
-        )
+
         commande = Commande(
-            application=(ligne["application"] or "").strip(),
-            bundle_id=(ligne["bundle_id"] or "").strip(),
+            application=ligne["application"].strip(),
+            bundle_id=ligne["bundle_id"].strip(),
             nom=nom,
-            touches=(ligne["touches"] or "").strip(),
-            phrases=phrases,
-            actif=_vrai_faux(ligne["actif"] or ""),
+            touches=touches,
+            phrases=tableaux.decouper_phrases(ligne["phrases"]),
+            actif=tableaux.vrai_faux(ligne["actif"]),
         )
         if commande.utilisable:
-            for phrase in phrases:
+            for phrase in commande.phrases:
                 if phrase in deja_vues:
                     raise ErreurProfil(
                         f"{chemin.name} ligne {numero} : la phrase « {phrase} » sert "
@@ -195,96 +205,45 @@ def charger(chemin: str | Path) -> Profil:
         commandes.append(commande)
 
     return Profil(
-        nom=chemin.stem,
-        chemin=chemin,
-        commandes=tuple(commandes) + _actions_manquantes(commandes),
+        nom=chemin.stem, chemin=chemin, commandes=tuple(commandes), actions=jeu
     )
 
 
-def _actions_manquantes(commandes: list[Commande]) -> tuple[Commande, ...]:
-    """Complète un profil avec les actions internes qu'il n'a pas déclarées, pour
-    qu'aucun profil ne perde la pause ni le coupe-circuit.
-
-    Un fichier sans aucune commande n'est pas un profil mais un gabarit : il reste
-    vierge.
-    """
-    if not commandes:
-        return ()
-    declarees = {c.touches for c in commandes}
-    occupees = {p for c in commandes if c.utilisable for p in c.phrases}
-    ajouts = []
-    for action, phrases in ACTIONS_GARANTIES.items():
-        if action in declarees:
-            continue
-        libres = tuple(p for p in phrases if p not in occupees)
-        ajouts.append(
-            Commande(
-                application="",
-                bundle_id="",
-                nom=action.removeprefix(PREFIXE_ACTION_INTERNE),
-                touches=action,
-                phrases=libres,
-                actif=bool(libres),
-            )
-        )
-    return tuple(ajouts)
-
-
 def charger_tous(dossier: str | Path) -> dict[str, Profil]:
-    """Charge tous les profils d'un dossier, gabarit exclu (il n'a que ses en-têtes)."""
+    """Charge tous les profils d'un dossier, gabarit et fichier d'actions exclus :
+    le préfixe `_` marque ce qui n'est pas un profil."""
     dossier = Path(dossier)
+    jeu = module_actions.charger(module_actions.chemin(dossier))
     return {
-        chemin.stem: charger(chemin)
+        chemin.stem: charger(chemin, jeu)
         for chemin in sorted(dossier.glob("*.csv"))
         if not chemin.name.startswith("_")
     }
 
 
-@dataclass(frozen=True)
-class Refus:
-    """Une raison de ne pas écrire un profil, située dans le fichier.
-
-    `ligne` suit la numérotation du fichier, en-tête compris : la première ligne de
-    données porte le numéro 2. Zéro désigne le fichier entier.
-    """
-
-    ligne: int
-    colonne: str
-    message: str
-
-
 def lire_lignes(chemin: str | Path) -> list[dict[str, str]]:
     """Rend les lignes d'un profil telles qu'elles sont écrites dans le fichier.
 
-    Distinct de `charger`, qui normalise les phrases et complète les actions
-    absentes : l'interface de réglages édite le fichier, pas le profil qu'il
+    Distinct de `charger`, qui normalise les phrases et rattache les actions
+    communes : l'interface de réglages édite le fichier, pas le profil qu'il
     produit, sans quoi elle réécrirait des lignes que personne n'a touchées.
     """
-    chemin = Path(chemin)
     try:
-        texte = chemin.read_text(encoding="utf-8")
-    except OSError as erreur:
-        raise ErreurProfil(f"profil illisible : {chemin}") from erreur
-
-    lecteur = csv.DictReader(texte.splitlines())
-    manquantes = set(COLONNES) - set(lecteur.fieldnames or ())
-    if manquantes:
-        raise ErreurProfil(
-            f"{chemin.name} : colonnes absentes {sorted(manquantes)}, "
-            f"attendues {list(COLONNES)}"
-        )
-    return [{colonne: (ligne.get(colonne) or "") for colonne in COLONNES} for ligne in lecteur]
+        return tableaux.lire_lignes(chemin, COLONNES)
+    except tableaux.ErreurTableau as erreur:
+        raise ErreurProfil(str(erreur)) from erreur
 
 
 def est_actif(ligne: Mapping[str, str]) -> bool:
     """Lit la colonne `actif` d'une ligne brute, avec la même souplesse que le
     chargement (`oui`, `o`, `vrai`, `1`)."""
-    return _vrai_faux(ligne.get("actif", ""))
+    return tableaux.vrai_faux(ligne.get("actif", ""))
 
 
 def valider(
     lignes: Iterable[Mapping[str, str]],
     verifier_touche: Callable[[str], None] | None = None,
+    phrases_reservees: Mapping[str, str] | None = None,
 ) -> list[Refus]:
     """Rejoue sur des lignes brutes les refus que le chargement et le lancement
     opposeraient, pour qu'un profil accepté ici ne fasse jamais échouer un
@@ -293,10 +252,19 @@ def valider(
     `verifier_touche` reçoit une combinaison et lève si elle est inconnue :
     `clavier.analyser` fait l'affaire. Omis, le contrôle des touches est sauté, ce
     qui garde ce module indépendant de macOS.
+
+    `phrases_reservees` associe une formulation déjà prise à ce qui la porte,
+    typiquement les actions internes : une commande qui reprendrait « pause »
+    rendrait le choix imprévisible. Omis, ce sont les formulations d'origine qui
+    servent, c'est-à-dire exactement ce que `charger` voit quand le fichier
+    d'actions manque : les deux ne peuvent pas diverger.
     """
+    if phrases_reservees is None:
+        phrases_reservees = module_actions.charger().phrases_prises()
+
     refus: list[Refus] = []
     noms_vus: dict[str, int] = {}
-    phrases_vues: dict[str, str] = {}
+    phrases_vues: dict[str, str] = dict(phrases_reservees)
 
     for numero, ligne in enumerate(lignes, start=2):
         if manquantes := set(COLONNES) - set(ligne):
@@ -326,32 +294,26 @@ def valider(
             noms_vus[nom] = numero
 
         if touches.startswith(PREFIXE_ACTION_INTERNE):
-            if touches not in ACTIONS_RESERVEES:
-                refus.append(
-                    Refus(
-                        numero,
-                        "touches",
-                        f"action interne inconnue : « {touches} », "
-                        f"attendues {sorted(ACTIONS_RESERVEES)}",
-                    )
+            refus.append(
+                Refus(
+                    numero,
+                    "touches",
+                    f"« {touches} » se règle pour tout l'outil, dans les mots de "
+                    "l'outil, plus profil par profil : retirer cette ligne",
                 )
+            )
         elif touches and actif and verifier_touche is not None:
             try:
                 verifier_touche(touches)
             except Exception as erreur:  # noqa: BLE001 - le message vient de clavier
                 refus.append(Refus(numero, "touches", str(erreur)))
 
-        # Même périmètre que `charger` : les lignes utilisables, mot de réveil
-        # compris. Les phrases d'une même ligne sont dédoublonnées comme il le fait,
-        # pour ne pas refuser ici un fichier qu'il accepterait là-bas.
+        # Même périmètre que `charger` : les lignes utilisables seulement, et le
+        # même découpage des formulations, pour ne pas refuser ici un fichier
+        # qu'il accepterait là-bas.
         if not (actif and touches):
             continue
-        phrases_ligne = dict.fromkeys(
-            normalisee
-            for brute in ligne["phrases"].split(SEPARATEUR_PHRASES)
-            if (normalisee := normaliser(brute))
-        )
-        for phrase in phrases_ligne:
+        for phrase in tableaux.decouper_phrases(ligne["phrases"]):
             if phrase in phrases_vues:
                 refus.append(
                     Refus(
@@ -369,40 +331,93 @@ def valider(
 
 def rendre_csv(lignes: Iterable[Mapping[str, str]]) -> str:
     """Sérialise des lignes au format du gabarit, colonnes dans l'ordre fixé."""
-    tampon = io.StringIO()
-    redacteur = csv.DictWriter(
-        tampon, fieldnames=list(COLONNES), lineterminator="\n", extrasaction="ignore"
-    )
-    redacteur.writeheader()
-    for ligne in lignes:
-        redacteur.writerow({colonne: ligne.get(colonne, "") for colonne in COLONNES})
-    return tampon.getvalue()
+    return tableaux.rendre_csv(lignes, COLONNES)
 
 
 def ecrire(chemin: str | Path, lignes: Iterable[Mapping[str, str]]) -> None:
-    """Écrit un profil, par fichier temporaire puis renommage.
+    """Écrit un profil, par fichier temporaire puis renommage."""
+    tableaux.ecrire(chemin, lignes, COLONNES)
 
-    Une écriture interrompue laisserait sinon un CSV tronqué, découvert au
-    lancement suivant, c'est-à-dire au pire moment.
+
+def _ordre_de_reprise(chemin: Path) -> tuple[int, str]:
+    """`defaut.csv` d'abord : c'est le profil que tout le monde a, et le plus
+    susceptible de porter les formulations que l'utilisateur a éprouvées."""
+    return (0 if chemin.stem == PROFIL_DE_REPLI else 1, chemin.name)
+
+
+def reprendre_actions(dossier: str | Path) -> bool:
+    """Sort les actions internes des profils vers le fichier commun, une fois.
+
+    Écrite pour les dossiers d'avant la séparation : sans elle, un profil déjà
+    installé chez l'utilisateur ferait échouer le chargement sur sa ligne `@pause`.
+    Rend vrai si quelque chose a bougé.
+
+    Deux précautions. Les formulations viennent des profils et non des valeurs
+    d'origine, pour ne pas défaire ce qui a été éprouvé en séance. Et un
+    `_actions.csv` déjà réglé n'est pas recouvert : seul celui qui est resté aux
+    valeurs d'origine, typiquement celui que l'application vient de copier, cède
+    la place à ce que portaient les profils.
     """
-    chemin = Path(chemin)
-    contenu = rendre_csv(lignes)
-    descripteur, provisoire = tempfile.mkstemp(
-        dir=chemin.parent, prefix=f".{chemin.name}.", suffix=".tmp"
-    )
-    try:
-        with os.fdopen(descripteur, "w", encoding="utf-8", newline="") as fichier:
-            fichier.write(contenu)
-            fichier.flush()
-            os.fsync(fichier.fileno())
-        os.replace(provisoire, chemin)
-    except BaseException:
-        Path(provisoire).unlink(missing_ok=True)
-        raise
+    dossier = Path(dossier)
+    if not dossier.is_dir():
+        return False
+
+    trouvees: dict[str, dict[str, str]] = {}
+    a_nettoyer: list[tuple[Path, list[dict[str, str]]]] = []
+
+    for fichier in sorted(dossier.glob("*.csv"), key=_ordre_de_reprise):
+        if fichier.name.startswith("_"):
+            continue
+        try:
+            lignes = tableaux.lire_lignes(fichier, COLONNES)
+        except tableaux.ErreurTableau:
+            continue
+
+        gardees = []
+        internes = []
+        for ligne in lignes:
+            cible = internes if ligne["touches"].strip().startswith(
+                PREFIXE_ACTION_INTERNE
+            ) else gardees
+            cible.append(ligne)
+        if not internes:
+            continue
+
+        for ligne in internes:
+            trouvees.setdefault(ligne["touches"].strip(), ligne)
+        a_nettoyer.append((fichier, gardees))
+
+    if not a_nettoyer:
+        return False
+
+    cible = module_actions.chemin(dossier)
+    deja_regle = cible.exists() and module_actions.lire_lignes(
+        cible
+    ) != module_actions.defauts()
+    if not deja_regle:
+        module_actions.ecrire(
+            cible,
+            [
+                {
+                    "action": nom,
+                    "phrases": trouvees[nom]["phrases"]
+                    if nom in trouvees
+                    else tableaux.joindre_phrases(defaut),
+                    "actif": "oui"
+                    if nom in module_actions.TOUJOURS_ACTIVES
+                    else trouvees.get(nom, {}).get("actif", "oui"),
+                }
+                for nom, defaut in module_actions.DEFAUTS.items()
+            ],
+        )
+
+    for fichier, gardees in a_nettoyer:
+        ecrire(fichier, gardees)
+    return True
 
 
 def profil_pour_bundle(
-    profils: dict[str, Profil], bundle_id: str, repli: str = "defaut"
+    profils: dict[str, Profil], bundle_id: str, repli: str = PROFIL_DE_REPLI
 ) -> Profil | None:
     """Choisit le profil de l'application au premier plan, avec repli sur `defaut`.
 

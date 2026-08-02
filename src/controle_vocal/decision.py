@@ -29,7 +29,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable
 
-from controle_vocal import application, profils
+from controle_vocal import actions, application, chemins, profils
 from controle_vocal.profils import Commande, Profil
 from controle_vocal.reconnaissance import Enonce
 
@@ -44,9 +44,11 @@ SEUIL_PAR_DEFAUT = 0.90
 #: au prix d'une porte ouverte au bruit. Arbitrage à trancher sur mesures.
 TOLERANCE_PAR_DEFAUT = 0
 
-ACTION_PAUSE = "@pause"
-ACTION_REPRISE = "@reprise"
-ACTION_QUITTER = "@quitter"
+#: Les formulations se règlent dans `_actions.csv` ; les noms, eux, sont figés :
+#: ce sont eux que le décideur reconnaît pour changer son propre état.
+ACTION_PAUSE = actions.ACTION_PAUSE
+ACTION_REPRISE = actions.ACTION_REPRISE
+ACTION_QUITTER = actions.ACTION_QUITTER
 
 NOM_PROFIL_REPLI = "defaut"
 
@@ -280,14 +282,22 @@ class Decideur:
 
 
 def dossier_profils() -> Path:
-    """Dossier des CSV, résolu depuis la racine du projet."""
-    return Path(__file__).resolve().parents[2] / "profils"
+    """Dossier des CSV. Voir `chemins` : le dépôt en développement, le dossier
+    de données de l'utilisateur depuis une application installée."""
+    return chemins.dossier_profils()
 
 
 def charger_jeu(dossier: str | Path | None = None) -> dict[str, Profil]:
-    """Charge tous les profils, en traduisant l'erreur de lecture en erreur de décision."""
+    """Charge tous les profils, en traduisant l'erreur de lecture en erreur de décision.
+
+    La reprise passe d'abord : un dossier d'avant la séparation des actions
+    internes porte encore ses lignes `@pause`, que le chargement refuse. Elle ne
+    fait rien sur un dossier déjà à jour.
+    """
+    dossier = Path(dossier) if dossier is not None else dossier_profils()
     try:
-        return profils.charger_tous(dossier or dossier_profils())
+        profils.reprendre_actions(dossier)
+        return profils.charger_tous(dossier)
     except profils.ErreurProfil as erreur:
         raise ErreurDecision(str(erreur)) from erreur
 

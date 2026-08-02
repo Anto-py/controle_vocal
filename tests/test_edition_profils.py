@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from controle_vocal import profils
+from controle_vocal import actions, profils, tableaux
 
 DOSSIER_PROFILS = Path(__file__).resolve().parents[1] / "profils"
 
@@ -45,12 +45,18 @@ def touche_connue(combinaison: str) -> None:
 
 def test_lire_lignes_rend_le_fichier_tel_quel() -> None:
     lignes = profils.lire_lignes(DOSSIER_PROFILS / "canva.csv")
-    assert lignes[0]["commande"] == "reveil"
-    assert lignes[0]["touches"] == "@reveil"
-    # `charger` normaliserait « présentation » et compléterait les actions absentes ;
-    # ici le fichier parle pour lui-même.
+    # `charger` normaliserait « présentation » et rattacherait les actions
+    # communes ; ici le fichier parle pour lui-même.
     presentation = next(l for l in lignes if l["commande"] == "presentation")
     assert presentation["phrases"] == "présentation|présente|démarre"
+
+
+def test_un_profil_ne_porte_plus_aucune_action_interne() -> None:
+    """Elles se règlent pour tout l'outil : un profil qui en garderait une aurait
+    une ligne sans effet, découverte au pire moment."""
+    for nom in ("canva.csv", "defaut.csv"):
+        lignes = profils.lire_lignes(DOSSIER_PROFILS / nom)
+        assert [l for l in lignes if l["touches"].startswith("@")] == []
 
 
 def test_lire_lignes_refuse_un_fichier_sans_les_colonnes(tmp_path: Path) -> None:
@@ -91,7 +97,7 @@ def test_ecriture_interrompue_laisse_le_fichier_intact(
     def replace_qui_echoue(*args: object, **kwargs: object) -> None:
         raise OSError("disque plein")
 
-    monkeypatch.setattr(profils.os, "replace", replace_qui_echoue)
+    monkeypatch.setattr(tableaux.os, "replace", replace_qui_echoue)
     with pytest.raises(OSError, match="disque plein"):
         profils.ecrire(fichier, [ligne("autre", phrases="autre")])
 
@@ -172,20 +178,31 @@ def test_phrase_repetee_dans_une_meme_ligne_est_admise() -> None:
     assert profils.valider([ligne("suivante", phrases="avance|avance")]) == []
 
 
-def test_refus_action_interne_inventee() -> None:
-    [refus] = profils.valider([ligne("pause", touches="@paus", phrases="pause")])
-    assert refus.colonne == "touches"
-    assert "@pause" in refus.message
+def test_refus_action_interne_dans_un_profil() -> None:
+    """Elles se règlent pour tout l'outil : gardée ici, la ligne resterait sans
+    effet, et le chargement la refuse aussi."""
+    refus = profils.valider([ligne("pause", touches="@pause", phrases="pause")])
+    [sur_la_touche] = [r for r in refus if r.colonne == "touches"]
+    assert "mots de l'outil" in sur_la_touche.message
 
 
-def test_le_mot_de_reveil_entre_dans_le_test_des_doublons() -> None:
-    """`charger` refuse qu'une commande porte la phrase du réveil : idem ici."""
-    lignes = [
-        ligne("reveil", touches="@reveil", phrases="higgins"),
-        ligne("suivante", phrases="higgins"),
-    ]
-    [refus] = profils.valider(lignes)
-    assert refus.ligne == 3
+def test_une_commande_ne_peut_pas_reprendre_une_formulation_d_action() -> None:
+    """`charger` refuse qu'une commande porte la phrase du réveil ou de la pause :
+    la validation voit les mêmes formulations réservées."""
+    [refus] = profils.valider([ligne("reveiller", phrases="higgins")])
+    assert refus.ligne == 2
+    assert refus.colonne == "phrases"
+    assert "@reveil" in refus.message
+
+
+def test_les_formulations_reservees_suivent_le_fichier_d_actions() -> None:
+    """Le mot de réveil changé, c'est l'ancien qui redevient libre."""
+    jeu = actions.charger()
+    assert profils.valider(
+        [ligne("suivante", phrases="higgins")],
+        phrases_reservees={"jarvis": actions.ACTION_REVEIL},
+    ) == []
+    assert "higgins" in jeu.phrases_prises()
 
 
 # --- La garantie -----------------------------------------------------------
@@ -197,10 +214,9 @@ def test_le_mot_de_reveil_entre_dans_le_test_des_doublons() -> None:
         pytest.param([ligne("suivante", phrases="avance|suite")], id="simple"),
         pytest.param(
             [
-                ligne("reveil", touches="@reveil", phrases="higgins|igince"),
                 ligne("suivante", phrases="avance"),
                 ligne("debut", touches="", phrases="début", actif="non"),
-                ligne("pause", touches="@pause", phrases="pause"),
+                ligne("noir", touches="b", phrases="noir|masque"),
             ],
             id="complet",
         ),

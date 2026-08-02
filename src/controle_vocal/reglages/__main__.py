@@ -18,15 +18,17 @@ import argparse
 import sys
 import threading
 import webbrowser
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
+from collections.abc import Iterable
+
+from controle_vocal import chemins, profils
 from controle_vocal.reglages.moteur import Moteur
 from controle_vocal.reglages.serveur import PORT_PAR_DEFAUT, Reglages, router
 
 ADRESSE_LOCALE = "127.0.0.1"
-
-DOSSIER_PROFILS = Path(__file__).resolve().parents[3] / "profils"
 
 #: Taille maximale d'un corps de requête. Un profil pèse un kilo-octet ; au-delà du
 #: mégaoctet, c'est une erreur, pas un CSV.
@@ -45,6 +47,27 @@ def _clavier():  # noqa: ANN202 - le module ou rien, selon la plateforme
     except Exception:  # noqa: BLE001 - PyObjC absent
         return None
     return clavier
+
+
+def _verifier_lexique() -> Callable[[Iterable[str]], list[str]] | None:
+    """Rend le contrôle du lexique Vosk, ou rien si le moteur manque.
+
+    Un modèle absent ne doit pas bloquer l'édition : le contrôle rend alors une
+    liste vide, c'est-à-dire aucun refus. Mieux vaut une interface qui laisse
+    passer qu'une interface qui n'ouvre pas.
+    """
+    try:
+        from controle_vocal import reconnaissance
+    except Exception:  # noqa: BLE001 - Vosk absent
+        return None
+
+    def controle(formulations: Iterable[str]) -> list[str]:
+        try:
+            return reconnaissance.mots_hors_lexique(formulations)
+        except (FileNotFoundError, OSError):
+            return []
+
+    return controle
 
 
 class Poignee(BaseHTTPRequestHandler):
@@ -86,8 +109,10 @@ def _analyser(arguments: list[str] | None = None) -> argparse.Namespace:
         description="Interface web locale pour éditer les profils.",
     )
     analyseur.add_argument("--port", type=int, default=PORT_PAR_DEFAUT)
+    # Résolu à l'appel et non à l'import : depuis une application, le dossier de
+    # données peut avoir à être créé et garni des profils livrés.
     analyseur.add_argument(
-        "--profils", type=Path, default=DOSSIER_PROFILS, help="dossier des CSV"
+        "--profils", type=Path, default=None, help="dossier des CSV"
     )
     analyseur.add_argument(
         "--sans-navigateur", action="store_true", help="ne pas ouvrir la page"
@@ -97,19 +122,26 @@ def _analyser(arguments: list[str] | None = None) -> argparse.Namespace:
 
 def main(arguments: list[str] | None = None) -> int:
     options = _analyser(arguments)
+    dossier = options.profils or chemins.dossier_profils()
 
-    if not options.profils.is_dir():
-        print(f"Dossier de profils introuvable : {options.profils}", file=sys.stderr)
+    if not dossier.is_dir():
+        print(f"Dossier de profils introuvable : {dossier}", file=sys.stderr)
         return 1
 
+    # Un dossier d'avant la séparation porte encore ses lignes `@pause` dans les
+    # profils : sans cette reprise, la première lecture échouerait. Sans effet sur
+    # un dossier à jour.
+    profils.reprendre_actions(dossier)
+
     clavier = _clavier()
-    moteur = Moteur(racine=options.profils.parent)
+    moteur = Moteur(racine=dossier.parent)
     reglages = Reglages(
-        options.profils,
+        dossier,
         verifier_touche=clavier.analyser if clavier else None,
         moteur=moteur,
         lire_accessibilite=clavier.accessibilite_accordee if clavier else None,
         demander_accessibilite=clavier.demander_accessibilite if clavier else None,
+        verifier_lexique=_verifier_lexique(),
     )
     Poignee.reglages = reglages
 
@@ -130,8 +162,8 @@ def main(arguments: list[str] | None = None) -> int:
     ).start()
 
     adresse = f"http://{ADRESSE_LOCALE}:{options.port}/"
-    nombre = len(list(options.profils.glob("*.csv")))
-    print(f"Réglages sur {adresse}  ({nombre} fichiers dans {options.profils})")
+    nombre = len(list(dossier.glob("*.csv")))
+    print(f"Réglages sur {adresse}  ({nombre} fichiers dans {dossier})")
     print("Ctrl+C pour arrêter.")
 
     if not options.sans_navigateur:

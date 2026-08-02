@@ -15,11 +15,11 @@ import csv
 import io
 import json
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from controle_vocal import profils
+from controle_vocal import actions, profils, tableaux
 from controle_vocal.reglages.moteur import ErreurMoteur, Moteur
 
 #: Port de la boucle locale. Fixe, pour que le signet reste valable.
@@ -79,6 +79,7 @@ class Reglages:
         arreter_serveur: Callable[[], None] | None = None,
         lire_accessibilite: Callable[[], bool] | None = None,
         demander_accessibilite: Callable[[], bool] | None = None,
+        verifier_lexique: Callable[[Iterable[str]], list[str]] | None = None,
     ) -> None:
         self.dossier = Path(dossier)
         self.verifier_touche = verifier_touche
@@ -86,6 +87,7 @@ class Reglages:
         self.arreter_serveur = arreter_serveur
         self.lire_accessibilite = lire_accessibilite
         self.demander_accessibilite = demander_accessibilite
+        self.verifier_lexique = verifier_lexique
 
     # -- chemins ----------------------------------------------------------
 
@@ -152,7 +154,11 @@ class Reglages:
     def touches_connues(self) -> dict[str, list[str]]:
         """Sert la liste déroulante de la page. Vide si le clavier n'est pas
         disponible, ce qui arrive hors macOS : la page reste utilisable, en saisie
-        libre, et la validation garde le dernier mot à l'enregistrement."""
+        libre, et la validation garde le dernier mot à l'enregistrement.
+
+        Les actions internes n'y figurent pas : elles ne s'écrivent plus dans un
+        profil, et les proposer ici mènerait droit à un refus.
+        """
         try:
             from controle_vocal import clavier
         except Exception:  # noqa: BLE001 - hors macOS, PyObjC manque
@@ -160,8 +166,93 @@ class Reglages:
         return {
             "touches": sorted(clavier.TOUCHES),
             "modificateurs": sorted(clavier.MODIFICATEURS),
-            "actions": sorted(profils.ACTIONS_RESERVEES),
         }
+
+    # -- actions internes -------------------------------------------------
+
+    @property
+    def chemin_actions(self) -> Path:
+        return actions.chemin(self.dossier)
+
+    def lire_actions(self) -> dict[str, object]:
+        """Les quatre actions et de quoi les présenter, en une seule requête."""
+        try:
+            lignes = actions.lire_lignes(self.chemin_actions)
+        except actions.ErreurActions as erreur:
+            raise ErreurRequete(422, str(erreur)) from erreur
+        return {
+            "lignes": lignes,
+            "libelles": {
+                nom: {"titre": titre, "detail": detail}
+                for nom, (titre, detail) in actions.LIBELLES.items()
+            },
+            "toujours_actives": sorted(actions.TOUJOURS_ACTIVES),
+        }
+
+    def phrases_des_profils(self) -> dict[str, str]:
+        """Formulations déjà prises par les commandes, tous profils confondus.
+
+        Une action interne vaut pour tous les profils : elle ne peut donc reprendre
+        aucune de leurs formulations, fût-ce dans un seul d'entre eux.
+        """
+        prises: dict[str, str] = {}
+        for chemin in sorted(self.dossier.glob("*.csv")):
+            if chemin.name.startswith("_"):
+                continue
+            try:
+                lignes = profils.lire_lignes(chemin)
+            except profils.ErreurProfil:
+                continue
+            for ligne in lignes:
+                if not (profils.est_actif(ligne) and ligne["touches"].strip()):
+                    continue
+                for phrase in tableaux.decouper_phrases(ligne["phrases"]):
+                    prises.setdefault(
+                        phrase, f"{chemin.stem} · {ligne['commande'].strip()}"
+                    )
+        return prises
+
+    def enregistrer_actions(self, lignes: list[Mapping[str, str]]) -> list[profils.Refus]:
+        """Valide puis écrit les actions internes. Sur refus, le fichier est intact.
+
+        Le contrôle du lexique vient en dernier, une fois la forme acquise : il
+        demande de charger le modèle Vosk, ce qui ne se fait pas pour un fichier
+        qu'on va refuser de toute façon.
+        """
+        refus = actions.valider(lignes, phrases_reservees=self.phrases_des_profils())
+        if not refus:
+            refus = self._refus_de_lexique(lignes)
+        if refus:
+            return refus
+        actions.ecrire(self.chemin_actions, lignes)
+        return []
+
+    def _refus_de_lexique(self, lignes: list[Mapping[str, str]]) -> list[profils.Refus]:
+        """Refuse les mots que le modèle ignore : il les retire de la grammaire
+        sans rien dire, et la formulation ne serait jamais reconnue."""
+        if self.verifier_lexique is None:
+            return []
+        refus = []
+        for numero, ligne in enumerate(lignes, start=2):
+            if not tableaux.vrai_faux(ligne.get("actif", "")) and (
+                ligne.get("action", "").strip() not in actions.TOUJOURS_ACTIVES
+            ):
+                continue
+            inconnus = self.verifier_lexique(
+                tableaux.decouper_phrases(ligne.get("phrases", ""))
+            )
+            if inconnus:
+                mots = ", ".join(f"« {mot} »" for mot in inconnus)
+                refus.append(
+                    profils.Refus(
+                        numero,
+                        "phrases",
+                        f"le modèle français ne connaît pas {mots} : il ne le "
+                        "reconnaîtra jamais. Prendre un mot ou un prénom du "
+                        "français courant, qu'on ne dit pas en cours.",
+                    )
+                )
+        return refus
 
     # -- écriture ---------------------------------------------------------
 
@@ -172,7 +263,15 @@ class Reglages:
         ce qu'elle accepte ne peut pas faire échouer un lancement.
         """
         chemin = self.chemin(nom)
-        refus = profils.valider(lignes, verifier_touche=self.verifier_touche)
+        try:
+            jeu = actions.charger(self.chemin_actions)
+        except actions.ErreurActions as erreur:
+            raise ErreurRequete(422, str(erreur)) from erreur
+        refus = profils.valider(
+            lignes,
+            verifier_touche=self.verifier_touche,
+            phrases_reservees=jeu.phrases_prises(),
+        )
         if refus:
             return refus
         profils.ecrire(chemin, lignes)
@@ -319,11 +418,32 @@ def _router(reglages: Reglages, methode: str, chemin: str, corps: bytes) -> Repo
     if reste == "touches" and methode == "GET":
         return Reponse.json(reglages.touches_connues())
 
+    if reste == "actions":
+        # Les quatre mots de l'outil, communs à tous les profils : ils ont leur
+        # route parce qu'ils ont leur fichier, et parce qu'un profil enregistré
+        # n'a pas à les réécrire.
+        if methode == "GET":
+            return Reponse.json(reglages.lire_actions())
+        if methode == "PUT":
+            charge = _charge_json(corps)
+            if not isinstance(charge, dict) or not isinstance(charge.get("lignes"), list):
+                raise ErreurRequete(400, 'corps attendu : { "lignes": [...] }')
+            if refus := reglages.enregistrer_actions(charge["lignes"]):
+                return _refus_en_json(refus)
+            return Reponse.json({"enregistre": actions.FICHIER})
+        raise ErreurRequete(405, f"méthode refusée : {methode}")
+
     if reste == "gabarit" and methode == "GET":
         return Reponse.csv(reglages.gabarit(), "_gabarit.csv")
 
     if reste == "profils" and methode == "GET":
-        return Reponse.json({"profils": reglages.liste()})
+        # Le dossier accompagne la liste : installée en application, l'interface
+        # édite des fichiers rangés dans la bibliothèque de l'utilisateur, que
+        # personne ne devinerait. Depuis le dépôt, il rappelle simplement que ce
+        # sont les CSV versionnés qu'on modifie.
+        return Reponse.json(
+            {"profils": reglages.liste(), "dossier": str(reglages.dossier)}
+        )
 
     if reste.startswith("profils/"):
         morceaux = reste.removeprefix("profils/").split("/")

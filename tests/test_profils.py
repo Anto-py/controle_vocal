@@ -74,9 +74,18 @@ def test_profil_defaut_sans_touche_destructrice() -> None:
     assert touches <= {"droite", "gauche", "echap", "@pause", "@reprise", "@quitter"}
 
 
-def test_gabarit_vide_se_charge_sans_commande() -> None:
+def test_gabarit_vide_se_charge_sans_commande_propre() -> None:
+    """Il n'a que ses en-têtes. Les actions internes lui viennent quand même : elles
+    ne sont pas à lui, elles sont à l'outil."""
     gabarit = profils.charger(DOSSIER_PROFILS / "_gabarit.csv")
-    assert gabarit.phrases_acceptees() == ()
+    assert gabarit.commandes == ()
+    assert set(gabarit.phrases_acceptees()) == {
+        "pause",
+        "silence",
+        "reprise",
+        "reprends",
+        "extinction",
+    }
 
 
 def test_gabarit_exclu_du_chargement_en_masse() -> None:

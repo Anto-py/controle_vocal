@@ -153,6 +153,31 @@ body {
   display: block;
 }
 
+/* --- Les mots de l'outil ------------------------------------------------- */
+
+.mots-outil .note { margin: 0 0 var(--space-md); }
+
+.grille-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--space-lg);
+  margin-bottom: var(--space-md);
+}
+.champ-action { display: flex; flex-direction: column; gap: var(--space-xs); }
+.champ-action .note { margin: 0; }
+/* La case rejoint le bas du bloc : sans cela, elle suit une note plus ou moins
+   longue et les quatre colonnes ne s'alignent plus. */
+.champ-action .option-case { margin-top: auto; }
+.champ-action.fautive .retro-label { color: var(--retro-orange); }
+
+.boutons-mots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+}
+.boutons-mots .note { margin: 0; flex: 1; min-width: 14rem; }
+
 .interrupteur {
   display: flex;
   align-items: center;
@@ -475,6 +500,10 @@ body {
 .bandeau p { margin: 0; font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.05em; }
 
 .note { font-size: var(--text-sm); opacity: 0.75; line-height: 1.5; }
+
+/* Un chemin est long et ne se coupe nulle part : il se replie sur lui-même
+   plutôt que d'élargir la colonne des profils. */
+.chemin { font-size: 0.85em; overflow-wrap: anywhere; opacity: 0.9; }
 
 .visuellement-cache {
   position: absolute;

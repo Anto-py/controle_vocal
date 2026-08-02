@@ -8,13 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from controle_vocal import profils
+from controle_vocal import actions, profils
 from controle_vocal.reglages import Reglages, router
 
 EN_TETE = "application,bundle_id,commande,touches,phrases,actif\n"
 CANVA = (
     EN_TETE
-    + "Canva,com.canva.CanvaDesktop,reveil,@reveil,higgins,oui\n"
     + "Canva,com.canva.CanvaDesktop,suivante,droite,suivante|avance,oui\n"
     + "Canva,com.canva.CanvaDesktop,debut,,début,non\n"
 )
@@ -58,14 +57,20 @@ def test_liste_compte_les_lignes_actives(reglages: Reglages) -> None:
     canva = charge(router(reglages, "GET", "/api/profils"))["profils"][0]
     assert canva["application"] == "Canva"
     assert canva["bundle_id"] == "com.canva.CanvaDesktop"
-    assert canva["commandes"] == 2  # `debut` est inactive
-    assert canva["total"] == 3
+    assert canva["commandes"] == 1  # `debut` est inactive
+    assert canva["total"] == 2
+
+
+def test_liste_dit_ou_sont_les_fichiers(reglages: Reglages, dossier: Path) -> None:
+    """Installée en application, l'interface édite des CSV rangés dans la
+    bibliothèque de l'utilisateur : la page doit pouvoir dire lesquels."""
+    assert charge(router(reglages, "GET", "/api/profils"))["dossier"] == str(dossier)
 
 
 def test_lecture_rend_les_lignes_brutes(reglages: Reglages) -> None:
     lignes = charge(router(reglages, "GET", "/api/profils/canva"))["lignes"]
-    assert lignes[0]["touches"] == "@reveil"
-    assert lignes[2]["phrases"] == "début"
+    assert lignes[0]["touches"] == "droite"
+    assert lignes[1]["phrases"] == "début"
 
 
 def test_profil_inconnu_rend_404(reglages: Reglages) -> None:
@@ -125,10 +130,7 @@ def ligne(commande: str, touches: str, phrases: str, actif: str = "oui") -> dict
 
 
 def test_enregistrement_valide_ecrit_le_fichier(reglages: Reglages, dossier: Path) -> None:
-    lignes = [
-        ligne("reveil", "@reveil", "higgins"),
-        ligne("suivante", "droite", "suivante|avance|page suivante"),
-    ]
+    lignes = [ligne("suivante", "droite", "suivante|avance|page suivante")]
     reponse = router(
         reglages, "PUT", "/api/profils/canva", json.dumps({"lignes": lignes}).encode()
     )
@@ -160,7 +162,6 @@ def test_corps_sans_lignes_rend_400(reglages: Reglages) -> None:
 def test_enregistre_puis_se_charge(reglages: Reglages, dossier: Path) -> None:
     """La garantie du jalon : ce que l'interface accepte, le cœur le charge."""
     lignes = [
-        ligne("reveil", "@reveil", "higgins"),
         ligne("suivante", "droite", "avance"),
         ligne("sortir", "echap", "sortir"),
     ]
@@ -341,3 +342,130 @@ def test_profil_illisible_apparait_dans_la_liste(reglages: Reglages, dossier: Pa
     casse = next(p for p in profils_listes if p["nom"] == "casse")
     assert "colonnes absentes" in casse["erreur"]
     assert len(profils_listes) == 3
+
+
+# --- Les mots de l'outil ---------------------------------------------------
+
+
+def action(nom: str, phrases: str, actif: str = "oui") -> dict[str, str]:
+    return {"action": nom, "phrases": phrases, "actif": actif}
+
+
+def test_lecture_des_actions_rend_les_quatre_champs(reglages: Reglages) -> None:
+    """Aucun fichier dans ce dossier : la route sert quand même les valeurs
+    d'origine, sans quoi l'interface s'ouvrirait vide."""
+    corps = charge(router(reglages, "GET", "/api/actions"))
+    assert [l["action"] for l in corps["lignes"]] == list(actions.DEFAUTS)
+    assert corps["libelles"]["@reveil"]["titre"] == "Mot de réveil"
+    assert corps["toujours_actives"] == ["@quitter", "@reveil"]
+
+
+def test_enregistrement_des_actions_ecrit_le_fichier(
+    reglages: Reglages, dossier: Path
+) -> None:
+    lignes = [action("@reveil", "jarvis"), action("@quitter", "extinction")]
+    reponse = router(
+        reglages, "PUT", "/api/actions", json.dumps({"lignes": lignes}).encode()
+    )
+    assert reponse.code == 200
+    assert actions.charger(actions.chemin(dossier)).mots_reveil == ("jarvis",)
+
+
+def test_le_mot_change_atteint_les_profils_du_dossier(
+    reglages: Reglages, dossier: Path
+) -> None:
+    """De bout en bout : ce que l'interface écrit, le cœur l'entend."""
+    lignes = [action("@reveil", "jarvis"), action("@quitter", "extinction")]
+    router(reglages, "PUT", "/api/actions", json.dumps({"lignes": lignes}).encode())
+    assert profils.charger_tous(dossier)["canva"].mots_reveil == ("jarvis",)
+
+
+def test_actions_fautives_ne_touchent_pas_le_fichier(
+    reglages: Reglages, dossier: Path
+) -> None:
+    lignes = [action("@reveil", "")]
+    reponse = router(
+        reglages, "PUT", "/api/actions", json.dumps({"lignes": lignes}).encode()
+    )
+    assert reponse.code == 422
+    assert not actions.chemin(dossier).exists()
+
+
+def test_une_action_ne_peut_pas_reprendre_la_formulation_d_un_profil(
+    reglages: Reglages,
+) -> None:
+    """« avance » sert déjà dans `canva.csv` : le mot de réveil ne peut pas la
+    reprendre, il vaudrait pour ce profil comme pour les autres."""
+    lignes = [action("@reveil", "avance")]
+    reponse = router(
+        reglages, "PUT", "/api/actions", json.dumps({"lignes": lignes}).encode()
+    )
+    assert reponse.code == 422
+    assert "canva" in charge(reponse)["refus"][0]["message"]
+
+
+def test_un_mot_hors_lexique_est_refuse(dossier: Path) -> None:
+    """Vosk retire de la grammaire un mot qu'il ne connaît pas, sans rien dire :
+    la télécommande démarrerait et ne répondrait jamais."""
+    reglages = Reglages(
+        dossier,
+        verifier_touche=touche_connue,
+        verifier_lexique=lambda mots: [m for m in mots if m == "zorglubtruc"],
+    )
+    lignes = [action("@reveil", "zorglubtruc"), action("@quitter", "extinction")]
+    reponse = router(
+        reglages, "PUT", "/api/actions", json.dumps({"lignes": lignes}).encode()
+    )
+    assert reponse.code == 422
+    assert "zorglubtruc" in charge(reponse)["refus"][0]["message"]
+    assert not actions.chemin(dossier).exists()
+
+
+def test_le_lexique_n_est_pas_consulte_si_la_forme_est_deja_fautive(
+    dossier: Path,
+) -> None:
+    """Charger le modèle Vosk coûte une seconde ou deux : inutile pour un fichier
+    qu'on va refuser de toute façon."""
+    appels = []
+
+    def espion(mots):  # noqa: ANN001, ANN202
+        appels.append(list(mots))
+        return []
+
+    reglages = Reglages(dossier, verifier_lexique=espion)
+    router(
+        reglages,
+        "PUT",
+        "/api/actions",
+        json.dumps({"lignes": [action("@reveil", "")]}).encode(),
+    )
+    assert appels == []
+
+
+def test_une_action_desactivee_echappe_au_controle_du_lexique(dossier: Path) -> None:
+    """Elle ne sera jamais dite : son mot n'a pas à être connu du modèle."""
+    appels = []
+
+    def espion(mots):  # noqa: ANN001, ANN202
+        appels.append(list(mots))
+        return []
+
+    reglages = Reglages(dossier, verifier_lexique=espion)
+    lignes = [
+        action("@reveil", "higgins"),
+        action("@pause", "zorglubtruc", actif="non"),
+        action("@quitter", "extinction"),
+    ]
+    router(
+        reglages, "PUT", "/api/actions", json.dumps({"lignes": lignes}).encode()
+    )
+    assert appels == [["higgins"], ["extinction"]]
+
+
+def test_methode_refusee_sur_les_actions(reglages: Reglages) -> None:
+    assert router(reglages, "POST", "/api/actions").code == 405
+
+
+def test_les_actions_ne_sont_plus_proposees_comme_touches(reglages: Reglages) -> None:
+    """Les proposer dans la liste déroulante mènerait droit à un refus."""
+    assert "actions" not in charge(router(reglages, "GET", "/api/touches"))

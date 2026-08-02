@@ -57,6 +57,28 @@
     <pre id="journal-moteur" class="journal" hidden aria-live="polite"></pre>
   </section>
 
+  <section class="poste mots-outil" aria-labelledby="titre-mots">
+    <h2 id="titre-mots" class="titre-section">Les mots de l'outil</h2>
+    <p class="note">
+      Ces quatre-là valent pour tous les profils : ils règlent la télécommande,
+      pas l'application qu'elle pilote. Plusieurs formulations se séparent par une
+      barre verticale, ce qui sert quand le modèle rend un même mot de deux façons.
+    </p>
+
+    <div id="champs-actions" class="grille-actions"></div>
+    <div id="bandeau-actions" class="bandeau" hidden></div>
+
+    <div class="boutons-mots">
+      <button class="retro-btn-pill" id="enregistrer-actions" type="button">
+        <span class="label">Enregistrer les mots</span><span class="icon">↳</span>
+      </button>
+      <p class="note">
+        Le changement est pris au prochain démarrage de la télécommande : la
+        grammaire est bâtie une fois, au lancement.
+      </p>
+    </div>
+  </section>
+
   <div class="atelier">
 
     <aside class="colonne-profils">
@@ -71,6 +93,7 @@
         </label>
       </div>
       <p class="note">L'import remplace le profil ouvert par le fichier choisi.</p>
+      <p class="note">Fichiers dans <code id="dossier-profils" class="chemin">…</code></p>
     </aside>
 
     <main class="colonne-table">

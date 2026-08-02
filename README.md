@@ -6,6 +6,8 @@ La table qui associe les phrases aux touches est un simple CSV, un par applicati
 
 Reconnaissance vocale **entièrement locale** : aucun son ne quitte la machine, aucun réseau à aucun étage.
 
+Deux façons de s'en servir, selon ce qu'on vient y faire. Une **application macOS** autonome, qui s'installe d'un glisser-déposer et n'exige rien sur la machine d'accueil, pas même Python : voir « Installer sur un autre Mac ». Ou le **dépôt**, pour développer et pour tout ce que la ligne de commande permet de plus.
+
 ## Installation
 
 ```sh
@@ -71,7 +73,7 @@ uv run -m controle_vocal.decision --texte "higgins suivante" "pause reviens avan
 
 ## Profils
 
-Un fichier par application dans `profils/`, six colonnes : `application`, `bundle_id`, `commande`, `touches`, `phrases`, `actif`. Les formulations acceptées se séparent par une barre verticale, les actions internes se préfixent par `@`.
+Un fichier par application dans `profils/` (dans le dossier personnel quand l'outil tourne en application installée, voir plus bas), six colonnes : `application`, `bundle_id`, `commande`, `touches`, `phrases`, `actif`. Les formulations acceptées se séparent par une barre verticale.
 
 ```csv
 application,bundle_id,commande,touches,phrases,actif
@@ -81,6 +83,32 @@ Canva,com.canva.CanvaDesktop,suivante,droite,suivante|suite|avance,oui
 `_gabarit.csv` fournit les en-têtes seuls pour démarrer un nouveau profil, `defaut.csv` sert de repli sur les applications inconnues, limité à la navigation.
 
 Une ligne dont la colonne `touches` est vide n'envoie rien : c'est ainsi qu'un raccourci non encore vérifié reste visible sans agir.
+
+## Les mots de l'outil
+
+Le mot de réveil, la pause, la reprise et l'extinction ne dépendent d'aucune application : ils se règlent une fois pour toutes, dans `profils/_actions.csv`, et la fenêtre de réglages leur donne quatre champs.
+
+```csv
+action,phrases,actif
+@reveil,higgins,oui
+@pause,pause|silence,oui
+@reprise,reprise|reprends,oui
+@quitter,extinction,oui
+```
+
+Trois choses à savoir avant de changer le mot de réveil.
+
+Il doit appartenir au **vocabulaire du modèle français**. Vosk n'échoue pas sur un mot qu'il ignore : il l'écarte de la grammaire et se tait, si bien que la télécommande démarrerait sans jamais répondre. La fenêtre de réglages refuse donc d'écrire un mot inconnu, et la ligne de commande donne le même verdict :
+
+```sh
+uv run -m controle_vocal.reconnaissance --lexique bernadette zorglubtruc
+```
+
+Il doit rester **hors du vocabulaire d'un cours** : c'est la seule barrière contre les déclenchements involontaires, le seuil de certitude n'y suffisant pas. Un prénom peu courant fait l'affaire.
+
+Enfin, le modèle rend parfois un même nom sous plusieurs graphies : la barre verticale les accueille toutes (`higgins|higuinsse`), et la liste se complète à l'oreille.
+
+L'extinction et le mot de réveil ne se désactivent pas. Sans le premier, on s'enferme avec une télécommande qu'on n'arrête plus à la voix ; sans le second, la moindre phrase de cours agirait.
 
 ## Fenêtre de réglages
 
@@ -100,7 +128,7 @@ uv run outils/fabriquer_app.py --vers ~/Applications
 
 La fabrication compile un petit lanceur en C et signe l'application, ce qui exige les outils en ligne de commande d'Xcode (`xcode-select --install`). Ce n'est pas du zèle : macOS n'accorde d'autorisation ni à un script, dont le processus réel est `/bin/bash`, ni à une application non signée, qu'il ne sait pas identifier.
 
-L'autorisation Accessibilité s'accorde alors une fois à « Contrôle vocal », dans Réglages système, et cesse de dépendre du terminal ouvert ce jour-là. La page affiche en permanence si elle est accordée, et propose de la demander sinon. L'application n'est pas fournie, elle se fabrique : elle porte les chemins de votre machine. Après une modification du code, la relancer suffit ; la refabriquer n'est utile que si le projet déménage.
+L'autorisation Accessibilité s'accorde alors une fois à « Contrôle vocal », dans Réglages système, et cesse de dépendre du terminal ouvert ce jour-là. La page affiche en permanence si elle est accordée, et propose de la demander sinon. L'application n'est pas fournie, elle se fabrique. Sans option, elle reste **liée à ce dossier de projet**, ce qui est commode en développement, le code lancé étant celui qu'on vient d'éditer : la relancer suffit après une modification. Pour une application qui voyage, voir la section suivante.
 
 Les réglages se ferment depuis la page, bouton « Fermer les réglages », qui arrête aussi la télécommande.
 
@@ -109,6 +137,36 @@ L'interrupteur en tête de page lance et arrête la télécommande, profil épin
 Elle refuse d'écrire ce que le lancement refuserait : touche que le clavier ignore, action interne inventée, nom de commande en double, formulation qui sert déjà à une autre commande. Le refus dit la cause et la solution à côté du champ fautif, et le fichier reste intact. Le geste courant y est l'ajout d'une formulation ; les touches, elles, arrivent d'ordinaire par import d'un CSV rempli en amont.
 
 Un profil enregistré est pris sans rien redémarrer, l'outil relisant ses profils à chaque changement d'application.
+
+## Installer sur un autre Mac
+
+`--autonome` embarque l'interpréteur Python, les paquets et le modèle de reconnaissance dans le bundle. L'application pèse alors environ 190 Mo et ne demande plus rien à la machine d'accueil : ni Python, ni `uv`, ni le dépôt, ni connexion. `--paquet` produit en plus une archive et la notice d'installation à joindre.
+
+```sh
+uv run outils/fabriquer_app.py --autonome
+uv run outils/fabriquer_app.py --paquet ~/Desktop/livraison
+uv run outils/fabriquer_app.py --paquet ~/Desktop/livraison --arch x86_64
+```
+
+Le lanceur est compilé pour les deux architectures, mais l'interpréteur embarqué n'en sert qu'une : `--arch` la choisit, et vaut par défaut celle de la machine qui fabrique. Un Mac Intel demande donc sa propre archive, fabricable depuis un Mac Apple Silicon.
+
+**Chez le destinataire, trois gestes.** Glisser l'application dans Applications ; lever la mise en quarantaine ; ouvrir, puis accorder l'Accessibilité et le micro.
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/Contrôle vocal.app"
+```
+
+Cette ligne est le péage d'une distribution de la main à la main. macOS marque tout fichier venu d'ailleurs, et refuse d'ouvrir une application qui n'est pas signée par un compte de développeur Apple, payant. Il annonce alors une application « endommagée », ce qu'elle n'est pas. Un certificat Developer ID et la notarisation supprimeraient cette étape ; ce projet ne les a pas.
+
+**Où vont les profils.** L'application ne modifie jamais son propre contenu, sous peine d'invalider sa signature et l'autorisation qu'elle porte. Les CSV sont donc copiés au premier lancement dans le dossier personnel, et c'est là que l'interface les édite. Le chemin est rappelé sous la liste des profils.
+
+```
+~/Library/Application Support/Contrôle vocal/profils/
+```
+
+Une nouvelle version de l'application n'y touche pas : un profil déjà présent n'est jamais remplacé par celui d'origine. En contrepartie, un gabarit amélioré n'atteint pas qui a déjà le sien, et se récupère par le bouton d'import.
+
+Une limite à connaître avant de distribuer : sans certificat, l'identité de l'application est le condensé de son binaire. Toute nouvelle version en change, et macOS redemande alors l'autorisation Accessibilité.
 
 ## Ce qui protège des déclenchements non voulus
 

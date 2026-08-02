@@ -12,26 +12,32 @@ Essai sur un fichier, sans micro ni action :
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
+import os
+import re
 import sys
+import tempfile
 import wave
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
 from vosk import KaldiRecognizer, Model, SetLogLevel
 
-from controle_vocal import profils
+from controle_vocal import chemins, profils
 
 #: Taux d'échantillonnage attendu par les modèles Vosk français.
 TAUX = 16000
 
-#: Emplacement du modèle, relatif à la racine du projet. Voir le README pour
-#: la commande de téléchargement.
-DOSSIER_MODELES = "modeles"
-
 #: Jeton que Vosk rend quand il n'a rien reconnu de la grammaire.
 TEXTE_INCONNU = profils.JETON_INCONNU
+
+#: Ce que Vosk écrit quand un mot de la grammaire manque à son lexique. Il le
+#: retire alors de la grammaire et se tait : sans cette lecture, un mot de réveil
+#: mal choisi donnerait une télécommande qui démarre et ne répond jamais.
+MOTIF_HORS_LEXIQUE = re.compile(r"Ignoring word missing in vocabulary: '([^']*)'")
 
 
 @dataclass(frozen=True)
@@ -61,14 +67,13 @@ class Enonce:
         return f"« {self.texte} »  certitude {self.certitude:.2f}   [{detail}]"
 
 
-def racine_projet() -> Path:
-    """Racine du dépôt, d'où se résolvent `modeles/` et `profils/`."""
-    return Path(__file__).resolve().parents[2]
-
-
 def chemin_modele(nom: str | None = None) -> Path:
-    """Trouve le modèle téléchargé. Sans nom donné, prend le seul présent."""
-    dossier = racine_projet() / DOSSIER_MODELES
+    """Trouve le modèle livré. Sans nom donné, prend le seul présent.
+
+    Le dossier vient de `chemins` : la racine du dépôt en développement, les
+    ressources du bundle dans une application installée.
+    """
+    dossier = chemins.dossier_modeles()
     if nom:
         return dossier / nom
     candidats = sorted(c for c in dossier.glob("vosk-model-*") if c.is_dir())
@@ -134,6 +139,72 @@ class Reconnaisseur:
         return Enonce(texte=texte, certitude=certitude, mots=mots)
 
 
+@contextlib.contextmanager
+def _capturer_journal() -> Iterator[Path]:
+    """Détourne la sortie d'erreur du système pendant le bloc, et rend le fichier.
+
+    Vosk écrit ses avertissements depuis sa couche C++, directement sur le
+    descripteur 2 : `contextlib.redirect_stderr`, qui ne remplace que l'objet
+    Python, ne les voit pas. Il faut détourner le descripteur lui-même.
+    """
+    with tempfile.TemporaryFile(mode="w+b") as tampon:
+        sys.stderr.flush()
+        copie = os.dup(2)
+        os.dup2(tampon.fileno(), 2)
+        try:
+            yield tampon
+        finally:
+            os.dup2(copie, 2)
+            os.close(copie)
+
+
+_modele_partage: Model | None = None
+
+
+def modele_partage(chemin: str | Path | None = None) -> Model:
+    """Charge le modèle une fois pour tout le processus.
+
+    Il pèse une quarantaine de mégaoctets et met une seconde ou deux à s'ouvrir :
+    l'interface de réglages, qui vérifie un mot à chaque enregistrement, ne peut
+    pas se le permettre à chaque fois.
+    """
+    global _modele_partage
+    if _modele_partage is None:
+        SetLogLevel(-1)
+        _modele_partage = Model(str(chemin or chemin_modele()))
+    return _modele_partage
+
+
+def mots_hors_lexique(
+    formulations: Iterable[str], modele: Model | None = None
+) -> list[str]:
+    """Rend les mots que le modèle ne connaît pas, dans l'ordre où ils viennent.
+
+    Un mot absent du lexique n'est pas une erreur pour Vosk : il le retire de la
+    grammaire et continue. La télécommande démarre alors sans rien dire et ne
+    répond jamais à la formulation concernée. Ce contrôle sert donc à refuser le
+    mot au moment où on l'écrit, pas à le découvrir devant la classe.
+    """
+    grammaire = [f for f in formulations if f]
+    if not grammaire:
+        return []
+
+    moteur = modele or modele_partage()
+    SetLogLevel(0)
+    try:
+        with _capturer_journal() as journal:
+            KaldiRecognizer(
+                moteur, TAUX, json.dumps(grammaire + [TEXTE_INCONNU], ensure_ascii=False)
+            )
+            # Lu à l'intérieur du bloc : le fichier temporaire se ferme en sortant.
+            journal.seek(0)
+            trace = journal.read().decode("utf-8", errors="replace")
+    finally:
+        SetLogLevel(-1)
+
+    return list(dict.fromkeys(MOTIF_HORS_LEXIQUE.findall(trace)))
+
+
 def lire_wav(chemin: str | Path, taille_bloc: int = 4000) -> Iterable[bytes]:
     """Découpe un WAV mono 16 bits en blocs, pour éprouver le moteur sans micro."""
     with wave.open(str(chemin), "rb") as fichier:
@@ -164,13 +235,33 @@ def _cli(arguments: list[str] | None = None) -> int:
         help="affiche la grammaire soumise au moteur, puis quitte",
     )
     analyseur.add_argument(
+        "--lexique",
+        nargs="+",
+        metavar="FORMULATION",
+        help="dit lesquels de ces mots le modèle ignore, puis quitte",
+    )
+    analyseur.add_argument(
         "--bavard",
         action="store_true",
         help="laisse Vosk écrire ses propres journaux",
     )
     options = analyseur.parse_args(arguments)
 
-    chemin_profil = racine_projet() / "profils" / f"{options.profil}.csv"
+    if options.lexique:
+        try:
+            inconnus = mots_hors_lexique(options.lexique)
+        except FileNotFoundError as erreur:
+            print(f"Erreur : {erreur}", file=sys.stderr)
+            return 2
+        if not inconnus:
+            print("Tous ces mots sont dans le lexique du modèle.")
+            return 0
+        print("Mots que le modèle ignore, et qui ne seront jamais reconnus :")
+        for mot in inconnus:
+            print(f"  {mot}")
+        return 1
+
+    chemin_profil = chemins.dossier_profils() / f"{options.profil}.csv"
     try:
         profil = profils.charger(chemin_profil)
     except profils.ErreurProfil as erreur:

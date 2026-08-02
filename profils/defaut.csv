@@ -1,8 +1,4 @@
 application,bundle_id,commande,touches,phrases,actif
-Défaut,,reveil,@reveil,higgins,oui
 Défaut,,suivante,droite,suivante|suite|avance,oui
 Défaut,,precedente,gauche,précédente|retour|recule,oui
 Défaut,,sortir,echap,sortir|sortie|termine,oui
-Défaut,,pause,@pause,pause|silence,oui
-Défaut,,reprise,@reprise,reprise|reprends,oui
-Défaut,,quitter,@quitter,extinction,oui
