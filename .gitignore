@@ -10,12 +10,6 @@ modeles/
 # macOS
 .DS_Store
 
-# Documents de pilotage internes au vault : hors du dépôt public, seul README.md
-# documente au-dehors (règle d'hygiène de vibe_coding/AGENTS.md).
-# Ils n'existent qu'ici, sur ce disque : le vault ne les sauvegarde plus depuis que
-# ce dossier est un dépôt à part.
-CLAUDE.md
-AGENTS.md
-SPECS.md
-JOURNAL.md
-docs/
+# Les documents de pilotage internes au vault (AGENTS, SPECS, JOURNAL, docs/) sont
+# tenus hors de ce dépôt public par `.git/info/exclude`, et non ici : un .gitignore
+# versionné s'appliquerait aussi au dépôt du vault, qui les englobe et les sauvegarde.
