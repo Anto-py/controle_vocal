@@ -1,0 +1,21 @@
+# Environnement Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Modèle de reconnaissance vocale : environ 40 Mo, téléchargé à l'installation
+modeles/
+
+# macOS
+.DS_Store
+
+# Documents de pilotage internes au vault : hors du dépôt public, seul README.md
+# documente au-dehors (règle d'hygiène de vibe_coding/AGENTS.md).
+# Ils n'existent qu'ici, sur ce disque : le vault ne les sauvegarde plus depuis que
+# ce dossier est un dépôt à part.
+CLAUDE.md
+AGENTS.md
+SPECS.md
+JOURNAL.md
+docs/

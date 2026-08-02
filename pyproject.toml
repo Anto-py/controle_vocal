@@ -1,0 +1,23 @@
+[project]
+name = "controle-vocal"
+version = "0.1.0"
+description = "Télécommande vocale pour piloter une présentation projetée sur macOS, hors ligne"
+readme = "README.md"
+authors = [{ name = "Anto-py" }]
+requires-python = ">=3.12"
+dependencies = [
+    "pyobjc-framework-applicationservices>=12.2.1",
+    "pyobjc-framework-cocoa>=12.2.1",
+    "pyobjc-framework-quartz>=12.2.1",
+    "sounddevice>=0.5.5",
+    "vosk==0.3.44",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
