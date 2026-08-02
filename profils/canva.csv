@@ -5,7 +5,8 @@ Canva,com.canva.CanvaDesktop,suivante,droite,suivante|suite|avance,oui
 Canva,com.canva.CanvaDesktop,precedente,gauche,précédente|retour|recule,oui
 Canva,com.canva.CanvaDesktop,debut,,début|première,non
 Canva,com.canva.CanvaDesktop,fin,,fin|dernière,non
-Canva,com.canva.CanvaDesktop,ecran_noir,,noir|écran noir,non
+Canva,com.canva.CanvaDesktop,ecran_noir,b,noir|masque,oui
+Canva,com.canva.CanvaDesktop,image,b,image|montre|reviens,oui
 Canva,com.canva.CanvaDesktop,sortir,echap,sortir|sortie|termine,oui
 Canva,com.canva.CanvaDesktop,pause,@pause,pause|silence,oui
 Canva,com.canva.CanvaDesktop,reprise,@reprise,reprise|reprends,oui

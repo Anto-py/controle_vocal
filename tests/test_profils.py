@@ -19,10 +19,11 @@ def test_phrases_acceptees(canva: profils.Profil) -> None:
     assert "suivante" in phrases
     assert "suite" in phrases
     assert "précédente" in phrases
+    assert "noir" in phrases
     # Les lignes sans touche établie sont hors grammaire tant qu'elles ne sont pas
     # vérifiées à la main (étape 4 du plan).
-    assert "noir" not in phrases
     assert "début" not in phrases
+    assert "dernière" not in phrases
 
 
 def test_synonyme_resout_vers_la_meme_touche(canva: profils.Profil) -> None:
@@ -36,7 +37,15 @@ def test_resolution_tolere_casse_et_ponctuation(canva: profils.Profil) -> None:
 
 def test_phrase_inconnue_ou_desactivee_ne_resout_pas(canva: profils.Profil) -> None:
     assert canva.resoudre("chauffe le café") is None
-    assert canva.resoudre("noir") is None
+    assert canva.resoudre("début") is None
+
+
+def test_ecran_noir_bascule_par_deux_formulations(canva: profils.Profil) -> None:
+    """`B` masque et démasque : deux commandes distinctes envoient la même touche,
+    pour que la formulation suive l'intention plutôt que l'état de la bascule."""
+    assert canva.resoudre("noir").touches == "b"
+    assert canva.resoudre("image").touches == "b"
+    assert canva.resoudre("noir").nom != canva.resoudre("image").nom
 
 
 def test_mot_reveil_hors_des_commandes(canva: profils.Profil) -> None:
