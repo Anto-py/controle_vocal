@@ -26,30 +26,43 @@ unzip -q modeles/fr.zip -d modeles && rm modeles/fr.zip
 
 Depuis le dossier du projet, sans quoi `uv` cherche un projet là où vous êtes et retombe sur le Python du système. Pour lancer d'ailleurs, ajouter `--directory <chemin du projet>` après `uv run`.
 
+La télécommande se lance avant l'exposé. Sans option, le profil suit l'application au premier plan ; `--profil canva` l'épingle pour la séance, `--simulation` fait tout sauf envoyer les touches, `--pastille` ajoute la pastille d'état sur la projection.
+
 ```sh
-# La télécommande, à lancer avant l'exposé
 uv run -m controle_vocal
-uv run -m controle_vocal --profil canva     # profil épinglé pour la séance
-uv run -m controle_vocal --simulation       # tout sauf l'envoi des touches
+uv run -m controle_vocal --profil canva
+uv run -m controle_vocal --simulation
+uv run -m controle_vocal --pastille
 ```
+
+Les blocs de ce fichier ne portent aucun commentaire, et c'est délibéré : une apostrophe française collée après une commande peut ouvrir une chaîne dans zsh, qui reste alors bloqué au prompt `quote>` sans rien lancer.
 
 Dites le mot de réveil, puis la commande, d'un seul tenant : « Higgins, suivante ». Le mot de réveil seul ne fait rien, la commande seule non plus. Trois commandes ne touchent pas à l'application : `pause` suspend l'écoute, `reprends` la rétablit, `extinction` arrête l'outil.
 
-Outils de mise au point, chacun lançable seul :
+## Pastille d'état
+
+`--pastille` pose un disque de couleur dans un coin de l'écran, visible par-dessus une présentation en plein écran. Sans texte : le public voit qu'une machine répond, sans lire le détail. Bleu, le mot de réveil a été entendu mais aucune commande ne suivait ; vert, la commande est partie ; orange, l'énoncé n'a pas atteint le seuil de certitude. Ce qui n'est pas adressé à l'outil n'allume rien.
+
+`--liste` donne les écrans et leur index, `--essai` fait défiler les trois couleurs le temps de basculer sur la présentation. Le coin, l'écran, le diamètre et la durée d'allumage se règlent au lancement.
 
 ```sh
-# Envoyer une touche, trois secondes pour basculer sur la fenêtre visée
+uv run -m controle_vocal.pastille --liste
+uv run -m controle_vocal.pastille --essai --tours 10
+uv run -m controle_vocal --pastille --pastille-coin haut_droite
+uv run -m controle_vocal --pastille --pastille-ecran 1
+uv run -m controle_vocal --pastille --pastille-taille 60 --pastille-duree 2
+```
+
+Si la pastille disparaît sous une application en plein écran, `--pastille-niveau bouclier` la fait passer au-dessus de tout, alertes système comprises.
+
+Outils de mise au point, chacun lançable seul : envoyer une touche avec trois secondes pour basculer sur la fenêtre visée, relever l'identifiant d'une application pour remplir la colonne `bundle_id`, lister les micros, écouter ce qui est reconnu, ou afficher les décisions et leur motif sans envoyer la moindre touche.
+
+```sh
 uv run -m controle_vocal.clavier --delai 3 droite
 uv run -m controle_vocal.clavier --liste
-
-# Relever l'identifiant des applications, pour remplir la colonne bundle_id
 uv run -m controle_vocal.application --observer
-
-# Micros disponibles, puis écoute qui affiche ce qui est reconnu, sans rien exécuter
 uv run -m controle_vocal.audio --liste
 uv run -m controle_vocal.reconnaissance
-
-# Écoute qui affiche les décisions et leur motif, sans envoyer de touche
 uv run -m controle_vocal.decision
 uv run -m controle_vocal.decision --texte "higgins suivante" "pause reviens avance"
 ```

@@ -19,7 +19,7 @@ import argparse
 import sys
 import time
 
-from controle_vocal import audio, clavier, profils
+from controle_vocal import audio, clavier, pastille as module_pastille, profils
 from controle_vocal.decision import (
     SEUIL_PAR_DEFAUT,
     TOLERANCE_PAR_DEFAUT,
@@ -69,9 +69,16 @@ def _accueil(
         "épinglé" if decideur.epingle else "suit l'application au premier plan"
     )
     simulation = ", simulation : aucune touche ne partira" if options.simulation else ""
+    surimpression = (
+        f"\nPastille en surimpression, coin {options.pastille_coin.replace('_', ' ')} "
+        f"de l'écran {options.pastille_ecran}."
+        if options.pastille
+        else ""
+    )
     return (
         f"Écoute en cours. Mot de réveil {reveil}, puis la commande.\n"
-        f"Profil « {profil.nom} » ({detection}), seuil {options.seuil:.2f}{simulation}\n"
+        f"Profil « {profil.nom} » ({detection}), seuil {options.seuil:.2f}{simulation}"
+        f"{surimpression}\n"
         "Pour arrêter : dites l'extinction, ou Ctrl+C."
     )
 
@@ -109,6 +116,44 @@ def _options(arguments: list[str] | None) -> argparse.Namespace:
         "--simulation",
         action="store_true",
         help="décide et affiche tout, mais n'envoie aucune touche",
+    )
+    analyseur.add_argument(
+        "--pastille",
+        action="store_true",
+        help="affiche la pastille d'état en surimpression sur la présentation",
+    )
+    analyseur.add_argument(
+        "--pastille-coin",
+        choices=module_pastille.COINS,
+        default=module_pastille.COIN_PAR_DEFAUT,
+        help="coin d'écran où poser la pastille",
+    )
+    analyseur.add_argument(
+        "--pastille-ecran",
+        type=int,
+        default=0,
+        metavar="INDEX",
+        help="écran de projection (liste : uv run -m controle_vocal.pastille --liste)",
+    )
+    analyseur.add_argument(
+        "--pastille-niveau",
+        choices=tuple(module_pastille.NIVEAUX),
+        default=module_pastille.NIVEAU_PAR_DEFAUT,
+        help="hauteur de la fenêtre, à monter si elle passe sous le plein écran",
+    )
+    analyseur.add_argument(
+        "--pastille-taille",
+        type=int,
+        default=module_pastille.TAILLE,
+        metavar="POINTS",
+        help=f"diamètre du disque (défaut : {module_pastille.TAILLE})",
+    )
+    analyseur.add_argument(
+        "--pastille-duree",
+        type=float,
+        default=module_pastille.DUREE_SIGNAL,
+        metavar="SECONDES",
+        help=f"durée d'allumage (défaut : {module_pastille.DUREE_SIGNAL})",
     )
     return analyseur.parse_args(arguments)
 
@@ -148,11 +193,27 @@ def principal(arguments: list[str] | None = None) -> int:
         print(f"Erreur : {erreur}", file=sys.stderr)
         return 2
 
+    try:
+        surimpression = module_pastille.ouvrir(
+            active=options.pastille,
+            coin=options.pastille_coin,
+            ecran=options.pastille_ecran,
+            taille=options.pastille_taille,
+            niveau=options.pastille_niveau,
+            duree=options.pastille_duree,
+        )
+    except module_pastille.ErreurPastille as erreur:
+        print(f"Erreur : {erreur}", file=sys.stderr)
+        return 2
+
     code = 0
     try:
-        with audio.Micro(taux=moteur.taux, peripherique=options.micro) as micro:
+        with surimpression, audio.Micro(
+            taux=moteur.taux, peripherique=options.micro
+        ) as micro:
             print(_accueil(profil, decideur, options))
             for numero, bloc in enumerate(micro):
+                surimpression.rafraichir()
                 if numero % BLOCS_ENTRE_DEUX_LECTURES == 0:
                     suivant = decideur.rafraichir_profil()
                     if suivant.nom != profil.nom:
@@ -173,6 +234,13 @@ def principal(arguments: list[str] | None = None) -> int:
                         clavier.envoyer(decision.touches)
                     duree = (time.perf_counter() - depart) * 1000
                     print(f"    touches « {decision.touches} » en {duree:.0f} ms")
+
+                # La pastille s'allume après la frappe, jamais avant : dessiner
+                # coûte une vingtaine de millisecondes, que la diapositive n'a
+                # pas à attendre. À l'œil, les deux sont simultanés.
+                surimpression.signaler(
+                    module_pastille.Signal.depuis_etat(decision.etat)
+                )
                 if decideur.arret_demande:
                     break
     except audio.ErreurMicro as erreur:

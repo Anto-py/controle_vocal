@@ -30,3 +30,11 @@ def test_une_touche_inconnue_est_signalee(tmp_path: Path) -> None:
 def test_profil_epingle_introuvable_arrete_avant_d_ecouter(capsys) -> None:
     assert principal.principal(["--profil", "powerpoint"]) == 2
     assert "powerpoint" in capsys.readouterr().err
+
+
+def test_la_pastille_est_eteinte_par_defaut() -> None:
+    """Le jalon 1 reste jouable tel quel : la surimpression se demande."""
+    options = principal._options([])
+    assert options.pastille is False
+    options = principal._options(["--pastille", "--pastille-coin", "haut_droite"])
+    assert options.pastille is True and options.pastille_coin == "haut_droite"
