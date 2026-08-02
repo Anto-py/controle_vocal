@@ -1,10 +1,17 @@
 """Pastille d'état en surimpression sur l'écran projeté : le jalon 2.
 
-Un disque de couleur, sans texte, dans un coin de l'écran. Trois signaux et
-trois seulement, décidés dans `docs/BRAINSTORMING.md` : entendu, exécuté,
-incompris. Le public voit qu'une machine répond, sans lire le détail ; l'état
-`ignore` du décideur n'allume rien, sans quoi la pastille clignoterait à chaque
-bruit de salle.
+Un disque de couleur, sans texte, dans un coin de l'écran. Trois signaux
+ponctuels, décidés dans `docs/BRAINSTORMING.md` : entendu, exécuté, incompris.
+Le public voit qu'une machine répond, sans lire le détail ; l'état `ignore` du
+décideur n'allume rien, sans quoi la pastille clignoterait à chaque bruit de
+salle.
+
+S'y ajoutent deux *veilleuses*, d'une autre nature : violettes, pâles, et
+permanentes tant que dure l'état qu'elles disent. À taille pleine, l'outil
+écoute ; à demi-diamètre, l'écoute est en pause. Une pastille éteinte ne veut
+donc plus dire « rien à signaler » mais « outil arrêté », ce qui était la seule
+chose que la pastille ne montrait pas : une pause oubliée, où plus rien ne
+répond et où rien ne le dit.
 
 Deux pièces séparées, parce qu'une seule des deux se teste sans écran :
 
@@ -22,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import time
+from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Protocol
 
@@ -55,6 +63,15 @@ MARGE = 40
 #: Opacité du disque : la pastille se pose sur la diapositive, elle ne la cache pas.
 OPACITE = 0.85
 
+#: Ce qui distingue une veilleuse d'un signal ponctuel : une opacité assez basse
+#: pour qu'un point fixe sur la projection se remarque quand on le cherche, sans
+#: tirer l'œil du public le reste du temps.
+OPACITE_VEILLE = 0.35
+
+#: Ce qui distingue les deux veilleuses l'une de l'autre : la pause tient sur un
+#: demi-diamètre, l'écoute sur le diamètre plein. Même violet, même pâleur.
+PART_EN_PAUSE = 0.5
+
 COINS = ("haut_gauche", "haut_droite", "bas_gauche", "bas_droite")
 COIN_PAR_DEFAUT = "bas_droite"
 
@@ -87,11 +104,13 @@ class ErreurPastille(Exception):
 
 
 class Signal(str, Enum):
-    """Ce que la pastille montre. Trois valeurs, calées sur celles du décideur."""
+    """Ce que la pastille montre. Les trois premiers sont calés sur le décideur."""
 
     ENTENDU = "entendu"
     EXECUTE = "execute"
     INCOMPRIS = "incompris"
+    ECOUTE = "ecoute"
+    PAUSE = "pause"
 
     @classmethod
     def depuis_etat(cls, etat) -> "Signal | None":
@@ -99,6 +118,9 @@ class Signal(str, Enum):
 
         Volontairement tenu par la valeur textuelle plutôt que par un import de
         `decision` : la pastille n'a pas à connaître le décideur pour l'afficher.
+        Les deux veilleuses n'en sortent jamais, aucun état de décision ne portant
+        leur nom : elles viennent de l'état de la séance, pas du verdict rendu sur
+        un énoncé.
         """
         valeur = getattr(etat, "value", etat)
         try:
@@ -107,11 +129,36 @@ class Signal(str, Enum):
             return None
 
 
-#: Couleurs des trois signaux, en composantes rouge, vert, bleu.
-COULEURS: dict[Signal, tuple[float, float, float]] = {
-    Signal.ENTENDU: (0.42, 0.68, 1.00),
-    Signal.EXECUTE: (0.25, 0.82, 0.45),
-    Signal.INCOMPRIS: (0.95, 0.45, 0.20),
+#: Les trois signaux qui s'allument le temps d'être vus, et les deux fonds qui
+#: durent tant que dure l'état de la séance.
+SIGNAUX_PONCTUELS = (Signal.ENTENDU, Signal.EXECUTE, Signal.INCOMPRIS)
+VEILLEUSES = (Signal.ECOUTE, Signal.PAUSE)
+
+#: Le violet ne dit ni la réussite ni l'échec : il ne ressemble à aucun des trois
+#: signaux ponctuels, et c'est ce qui le désigne pour l'état de la séance.
+VIOLET = (0.62, 0.45, 0.95)
+
+
+@dataclass(frozen=True)
+class Aspect:
+    """L'apparence d'un signal : sa couleur, sa pâleur, sa part du diamètre.
+
+    Une donnée plutôt qu'un branchement dans la surface : les deux veilleuses ne
+    diffèrent que par un nombre, et la surface n'a pas à savoir laquelle est
+    laquelle pour la dessiner.
+    """
+
+    couleur: tuple[float, float, float]
+    opacite: float
+    part: float = 1.0
+
+
+ASPECTS: dict[Signal, Aspect] = {
+    Signal.ENTENDU: Aspect((0.42, 0.68, 1.00), OPACITE),
+    Signal.EXECUTE: Aspect((0.25, 0.82, 0.45), OPACITE),
+    Signal.INCOMPRIS: Aspect((0.95, 0.45, 0.20), OPACITE),
+    Signal.ECOUTE: Aspect(VIOLET, OPACITE_VEILLE),
+    Signal.PAUSE: Aspect(VIOLET, OPACITE_VEILLE, PART_EN_PAUSE),
 }
 
 
@@ -183,6 +230,11 @@ class SurfaceCocoa:
       s'affiche sans que le processus devienne l'application active ;
     - le disque est obtenu par le rayon d'angle d'une couche, pas par un dessin
       sur mesure : rien à sous-classer côté Objective-C.
+
+    La fenêtre garde toujours le même cadre, quel que soit le signal : seul le
+    disque qu'elle contient maigrit, centré. Redimensionner la fenêtre
+    obligerait à recalculer son origine à chaque changement de format, et à
+    refaire ce calcul juste pour un écran de projection décalé.
     """
 
     def __init__(
@@ -192,7 +244,6 @@ class SurfaceCocoa:
         ecran: int = 0,
         marge: int = MARGE,
         niveau: str = NIVEAU_PAR_DEFAUT,
-        opacite: float = OPACITE,
     ) -> None:
         if niveau not in NIVEAUX:
             raise ErreurPastille(
@@ -201,7 +252,7 @@ class SurfaceCocoa:
         # Écran et coin sont résolus avant la moindre fenêtre : un réglage
         # fautif doit échouer au lancement, sans rien laisser derrière lui.
         origine = origine_pastille(cadre_ecran(ecran), taille, coin, marge)
-        self.opacite = opacite
+        self.taille = taille
 
         application = NSApplication.sharedApplication()
         application.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
@@ -217,19 +268,30 @@ class SurfaceCocoa:
         self._fenetre.setLevel_(NIVEAUX[niveau])
         self._fenetre.setCollectionBehavior_(COMPORTEMENT)
 
-        self._vue = NSView.alloc().initWithFrame_(rectangle)
-        self._vue.setWantsLayer_(True)
-        self._vue.layer().setCornerRadius_(taille / 2)
-        self._fenetre.setContentView_(self._vue)
+        # Un conteneur transparent occupe la fenêtre, le disque vit dedans :
+        # une vue de contenu est étirée d'office au cadre de la fenêtre, une
+        # sous-vue garde le format qu'on lui donne.
+        self._conteneur = NSView.alloc().initWithFrame_(rectangle)
+        self._disque = NSView.alloc().initWithFrame_(rectangle)
+        self._disque.setWantsLayer_(True)
+        self._disque.layer().setCornerRadius_(taille / 2)
+        self._conteneur.addSubview_(self._disque)
+        self._fenetre.setContentView_(self._conteneur)
 
         self._fenetre.setFrameOrigin_(origine)
 
     def poser(self, signal: Signal) -> None:
-        rouge, vert, bleu = COULEURS[signal]
+        aspect = ASPECTS[signal]
+        diametre = self.taille * aspect.part
+        retrait = (self.taille - diametre) / 2
+        self._disque.setFrame_(NSMakeRect(retrait, retrait, diametre, diametre))
+        self._disque.layer().setCornerRadius_(diametre / 2)
+
+        rouge, vert, bleu = aspect.couleur
         couleur = NSColor.colorWithCalibratedRed_green_blue_alpha_(
-            rouge, vert, bleu, self.opacite
+            rouge, vert, bleu, aspect.opacite
         )
-        self._vue.layer().setBackgroundColor_(couleur.CGColor())
+        self._disque.layer().setBackgroundColor_(couleur.CGColor())
         self._fenetre.orderFrontRegardless()
         _pomper()
 
@@ -286,6 +348,11 @@ class Pastille:
     Aucune minuterie du système : l'extinction est demandée par `rafraichir`,
     que la boucle principale appelle à chaque bloc audio. Un seul fil, aucun
     verrou, et une logique qui se teste avec une horloge de papier.
+
+    Deux couches se superposent, sans se mélanger : la veilleuse est le fond,
+    posée par `veiller` et sans échéance ; un signal ponctuel la couvre le temps
+    d'être vu, puis lui rend la place. Le fond n'a donc pas à être reposé par
+    l'appelant après chaque commande.
     """
 
     def __init__(
@@ -299,11 +366,17 @@ class Pastille:
         self._horloge = horloge
         self._signal: Signal | None = None
         self._echeance: float | None = None
+        self._veilleuse: Signal | None = None
 
     @property
     def signal(self) -> Signal | None:
-        """Le signal allumé, ou rien si la pastille est éteinte."""
+        """Le signal ponctuel allumé, veilleuse non comprise."""
         return self._signal
+
+    @property
+    def veilleuse(self) -> Signal | None:
+        """Le fond permanent, ou rien s'il n'y en a pas."""
+        return self._veilleuse
 
     def signaler(self, signal: Signal | None) -> None:
         """Allume un signal pour la durée réglée. Un `None` n'allume rien."""
@@ -313,18 +386,40 @@ class Pastille:
         self._echeance = self._horloge() + self.duree
         self.surface.poser(signal)
 
+    def veiller(self, veilleuse: Signal | None) -> None:
+        """Pose ou retire le fond permanent, sans couper un signal en cours.
+
+        Appelable à chaque tour de boucle : un fond déjà posé ne se redessine
+        pas, sans quoi la surface travaillerait pour rien à chaque bloc audio.
+        """
+        if veilleuse is self._veilleuse:
+            return
+        self._veilleuse = veilleuse
+        if self._signal is None:
+            self._montrer_le_fond()
+
     def rafraichir(self) -> None:
-        """Éteint la pastille si son temps est passé. Sans effet sinon."""
+        """Rend la place au fond quand le temps du signal est passé.
+
+        Sans veilleuse, le fond est le noir : la pastille s'éteint.
+        """
         if self._echeance is None:
             return
         if self._horloge() >= self._echeance:
             self._signal = None
             self._echeance = None
+            self._montrer_le_fond()
+
+    def _montrer_le_fond(self) -> None:
+        if self._veilleuse is None:
             self.surface.effacer()
+        else:
+            self.surface.poser(self._veilleuse)
 
     def fermer(self) -> None:
         self._signal = None
         self._echeance = None
+        self._veilleuse = None
         self.surface.fermer()
 
     def __enter__(self) -> "Pastille":
@@ -368,7 +463,7 @@ def _lister_ecrans() -> None:
 
 
 def essai(pastille: Pastille, tours: int = 3, repos: float = 0.6) -> None:
-    """Fait défiler les trois signaux, pour juger la pastille à l'œil.
+    """Fait défiler les signaux, pour juger la pastille à l'œil.
 
     À lancer une présentation ouverte en plein écran : c'est le seul moyen de
     vérifier que la fenêtre passe au-dessus, ce qu'aucun test ne dit.
@@ -379,11 +474,25 @@ def essai(pastille: Pastille, tours: int = 3, repos: float = 0.6) -> None:
         "la pastille doit rester visible."
     )
     for tour in range(1, tours + 1):
-        for signal in Signal:
+        for signal in SIGNAUX_PONCTUELS:
             print(f"  tour {tour} : {signal.value}")
             pastille.signaler(signal)
             _attendre(pastille, pastille.duree)
             _attendre(pastille, repos)
+
+    print(
+        "  veilleuses violettes, permanentes : disque plein pendant l'écoute,\n"
+        "    demi-disque pendant la pause. Une commande va passer par-dessus la\n"
+        "    seconde, qui doit reprendre sa place ensuite."
+    )
+    for veilleuse in VEILLEUSES:
+        print(f"    {veilleuse.value}")
+        pastille.veiller(veilleuse)
+        _attendre(pastille, 3.0)
+    pastille.signaler(Signal.EXECUTE)
+    _attendre(pastille, pastille.duree + 3.0)
+    pastille.veiller(None)
+    _attendre(pastille, repos)
     print("Essai terminé.")
 
 

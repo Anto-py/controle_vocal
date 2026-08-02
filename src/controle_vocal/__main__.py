@@ -212,6 +212,9 @@ def principal(arguments: list[str] | None = None) -> int:
             taux=moteur.taux, peripherique=options.micro
         ) as micro:
             print(_accueil(profil, decideur, options))
+            # Allumée avant le premier mot : la veilleuse dit que l'outil est en
+            # vie, ce qui n'a d'intérêt que si elle n'attend pas qu'on lui parle.
+            surimpression.veiller(module_pastille.Signal.ECOUTE)
             for numero, bloc in enumerate(micro):
                 surimpression.rafraichir()
                 if numero % BLOCS_ENTRE_DEUX_LECTURES == 0:
@@ -240,6 +243,15 @@ def principal(arguments: list[str] | None = None) -> int:
                 # pas à attendre. À l'œil, les deux sont simultanés.
                 surimpression.signaler(
                     module_pastille.Signal.depuis_etat(decision.etat)
+                )
+                # La veilleuse suit l'état de la séance et non le verdict : une
+                # commande dite pendant la pause sort en « ignore », qui n'allume
+                # rien. Sans ce fond permanent, une pause oubliée ressemblerait
+                # trait pour trait à un outil planté.
+                surimpression.veiller(
+                    module_pastille.Signal.PAUSE
+                    if decideur.en_pause
+                    else module_pastille.Signal.ECOUTE
                 )
                 if decideur.arret_demande:
                     break

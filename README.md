@@ -41,9 +41,11 @@ Dites le mot de réveil, puis la commande, d'un seul tenant : « Higgins, suivan
 
 ## Pastille d'état
 
-`--pastille` pose un disque de couleur dans un coin de l'écran, visible par-dessus une présentation en plein écran. Sans texte : le public voit qu'une machine répond, sans lire le détail. Bleu, le mot de réveil a été entendu mais aucune commande ne suivait ; vert, la commande est partie ; orange, l'énoncé n'a pas atteint le seuil de certitude. Ce qui n'est pas adressé à l'outil n'allume rien.
+`--pastille` pose un disque de couleur dans un coin de l'écran, visible par-dessus une présentation en plein écran. Sans texte : le public voit qu'une machine répond, sans lire le détail. Bleu, le mot de réveil a été entendu mais aucune commande ne suivait ; vert, la commande est partie ; orange, l'énoncé n'a pas atteint le seuil de certitude. Chacune s'allume une seconde et des poussières. Ce qui n'est pas adressé à l'outil n'allume rien.
 
-`--liste` donne les écrans et leur index, `--essai` fait défiler les trois couleurs le temps de basculer sur la présentation. Le coin, l'écran, le diamètre et la durée d'allumage se règlent au lancement.
+Deux autres signaux ne s'éteignent pas : ils disent l'état de l'outil plutôt qu'une réponse à ce que vous venez de dire. Un disque violet pâle, allumé en permanence, l'outil écoute ; le même en demi-diamètre, l'écoute est en pause et seule la reprise sera entendue. Une commande les couvre le temps de sa couleur, puis ils reviennent. La pastille éteinte veut donc dire que l'outil est arrêté.
+
+`--liste` donne les écrans et leur index, `--essai` fait défiler les couleurs le temps de basculer sur la présentation, veilleuses comprises. Le coin, l'écran, le diamètre et la durée d'allumage se règlent au lancement.
 
 ```sh
 uv run -m controle_vocal.pastille --liste

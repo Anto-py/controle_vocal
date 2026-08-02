@@ -11,7 +11,10 @@ import pytest
 
 from controle_vocal.decision import Etat
 from controle_vocal.pastille import (
+    ASPECTS,
     COINS,
+    SIGNAUX_PONCTUELS,
+    VEILLEUSES,
     ErreurPastille,
     Pastille,
     Signal,
@@ -134,6 +137,111 @@ def test_le_bloc_with_ferme_la_surface():
         pastille.signaler(Signal.EXECUTE)
     assert surface.journal[-1] == "fermer"
     assert pastille.signal is None
+
+
+# --- Les veilleuses d'écoute et de pause ------------------------------------
+
+
+def test_les_veilleuses_ne_sont_pas_des_etats_de_decision():
+    """Une veilleuse vient de l'état de la séance, jamais d'un verdict sur un énoncé."""
+    assert Signal.depuis_etat("pause") is Signal.PAUSE
+    assert Signal.depuis_etat("ecoute") is Signal.ECOUTE
+    for etat in Etat:
+        assert Signal.depuis_etat(etat) not in VEILLEUSES
+
+
+def test_les_deux_veilleuses_ne_different_que_par_la_taille():
+    """Même violet, même pâleur : c'est le diamètre qui dit l'écoute ou la pause."""
+    ecoute, pause = ASPECTS[Signal.ECOUTE], ASPECTS[Signal.PAUSE]
+    assert (ecoute.couleur, ecoute.opacite) == (pause.couleur, pause.opacite)
+    assert ecoute.part == 1.0
+    assert pause.part < ecoute.part
+
+
+def test_une_veilleuse_est_plus_pale_qu_un_signal_ponctuel():
+    for veilleuse in VEILLEUSES:
+        for ponctuel in SIGNAUX_PONCTUELS:
+            assert ASPECTS[veilleuse].opacite < ASPECTS[ponctuel].opacite
+
+
+def test_veiller_pose_un_fond():
+    pastille, surface, _ = pastille_de_test()
+    pastille.veiller(Signal.PAUSE)
+    assert surface.signal is Signal.PAUSE
+    assert pastille.veilleuse is Signal.PAUSE
+
+
+def test_le_fond_ne_se_redessine_pas_a_chaque_tour():
+    """La boucle appelle `veiller` à chaque énoncé : le fond ne doit pas clignoter."""
+    pastille, surface, _ = pastille_de_test()
+    for _ in range(5):
+        pastille.veiller(Signal.ECOUTE)
+    assert surface.journal == ["poser:ecoute"]
+
+
+def test_passer_d_une_veilleuse_a_l_autre_redessine():
+    """La mise en pause doit se voir, elle ne change que le diamètre."""
+    pastille, surface, _ = pastille_de_test()
+    pastille.veiller(Signal.ECOUTE)
+    pastille.veiller(Signal.PAUSE)
+    assert surface.journal == ["poser:ecoute", "poser:pause"]
+
+
+def test_un_signal_ponctuel_couvre_la_veilleuse():
+    pastille, surface, _ = pastille_de_test()
+    pastille.veiller(Signal.ECOUTE)
+    pastille.signaler(Signal.EXECUTE)
+    assert surface.signal is Signal.EXECUTE
+
+
+def test_la_veilleuse_revient_a_l_echeance_du_signal():
+    """Le fond n'a pas à être reposé par l'appelant après chaque commande."""
+    pastille, surface, horloge = pastille_de_test(duree=1.0)
+    pastille.veiller(Signal.ECOUTE)
+    pastille.signaler(Signal.EXECUTE)
+    horloge.avancer(1.0)
+    pastille.rafraichir()
+    assert surface.signal is Signal.ECOUTE
+    assert "effacer" not in surface.journal
+
+
+def test_entrer_en_pause_pendant_un_signal_n_interrompt_pas_le_signal():
+    """« Higgins, pause » sort en vert : le vert va au bout, le violet suit."""
+    pastille, surface, horloge = pastille_de_test(duree=1.0)
+    pastille.signaler(Signal.EXECUTE)
+    pastille.veiller(Signal.PAUSE)
+    assert surface.signal is Signal.EXECUTE
+    horloge.avancer(1.0)
+    pastille.rafraichir()
+    assert surface.signal is Signal.PAUSE
+
+
+def test_la_reprise_eteint_la_veilleuse():
+    pastille, surface, horloge = pastille_de_test(duree=1.0)
+    pastille.veiller(Signal.PAUSE)
+    pastille.signaler(Signal.EXECUTE)
+    pastille.veiller(None)
+    horloge.avancer(1.0)
+    pastille.rafraichir()
+    assert surface.signal is None
+    assert pastille.veilleuse is None
+
+
+def test_retirer_la_veilleuse_hors_signal_eteint_tout_de_suite():
+    """Une pastille éteinte dit désormais l'outil arrêté, plus le simple repos."""
+    pastille, surface, _ = pastille_de_test()
+    pastille.veiller(Signal.ECOUTE)
+    pastille.veiller(None)
+    assert surface.signal is None
+    assert surface.journal == ["poser:ecoute", "effacer"]
+
+
+def test_fermer_emporte_la_veilleuse():
+    pastille, surface, _ = pastille_de_test()
+    pastille.veiller(Signal.ECOUTE)
+    pastille.fermer()
+    assert pastille.veilleuse is None
+    assert surface.journal[-1] == "fermer"
 
 
 # --- Placement sur l'écran --------------------------------------------------
