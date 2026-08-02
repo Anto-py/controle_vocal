@@ -15,6 +15,7 @@ import time
 from dataclasses import dataclass
 
 from AppKit import NSWorkspace
+from Foundation import NSDate, NSRunLoop
 
 #: Rythme d'interrogation du mode observation, en secondes.
 PERIODE_OBSERVATION = 0.5
@@ -32,7 +33,16 @@ class ApplicationActive:
 
 
 def au_premier_plan() -> ApplicationActive | None:
-    """Rend l'application active, ou rien si le système n'en signale aucune."""
+    """Rend l'application active, ou rien si le système n'en signale aucune.
+
+    `NSWorkspace` tient son état à jour par notifications : dans un processus qui
+    ne fait pas tourner sa boucle d'exécution, il reste figé sur l'application du
+    démarrage. Vérifié sur machine le 2026-08-02, une boucle en `time.sleep` gardait
+    indéfiniment le même identifiant. D'où le dépilage ci-dessous, qui traite les
+    notifications en attente puis rend la main aussitôt : la lecture se rafraîchit
+    seule, et aucun appelant n'a à connaître ce piège.
+    """
+    NSRunLoop.currentRunLoop().runUntilDate_(NSDate.date())
     application = NSWorkspace.sharedWorkspace().frontmostApplication()
     if application is None:
         return None

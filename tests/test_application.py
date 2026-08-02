@@ -1,6 +1,11 @@
 """Détection de l'application au premier plan et choix du profil correspondant."""
 
+import os
+import subprocess
+import time
 from pathlib import Path
+
+import pytest
 
 from controle_vocal import application, profils
 
@@ -23,3 +28,25 @@ def test_application_inconnue_replie_sur_defaut() -> None:
     tous = profils.charger_tous(DOSSIER_PROFILS)
     assert profils.profil_pour_bundle(tous, "com.google.Chrome").nom == "defaut"
     assert profils.profil_pour_bundle(tous, "").nom == "defaut"
+
+
+@pytest.mark.skipif(
+    os.environ.get("CONTROLE_VOCAL_TEST_FOCUS") != "1",
+    reason="vole le focus des fenêtres : CONTROLE_VOCAL_TEST_FOCUS=1 pour le lancer",
+)
+def test_la_detection_suit_le_changement_de_fenetre() -> None:
+    """Régression du 2026-08-02 : sans dépilage des notifications, `NSWorkspace`
+    restait figé sur l'application présente au démarrage du processus."""
+    for nom, attendu in [
+        ("Finder", "com.apple.finder"),
+        ("Terminal", "com.apple.Terminal"),
+        ("Finder", "com.apple.finder"),
+    ]:
+        subprocess.run(
+            ["osascript", "-e", f'tell application "{nom}" to activate'],
+            capture_output=True,
+            check=True,
+        )
+        time.sleep(0.8)
+        courante = application.au_premier_plan()
+        assert courante is not None and courante.bundle_id == attendu
