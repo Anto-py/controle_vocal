@@ -1,0 +1,516 @@
+/* Charte rétrofuturisme, appliquée à l'interface de réglages.
+   Polices servies depuis ce dossier, jamais depuis un service tiers : le projet
+   ne sort sur le réseau à aucun étage, et la page garde son allure en salle. */
+
+@font-face {
+  font-family: 'Anton';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/polices/anton.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Oswald';
+  font-style: normal;
+  font-weight: 200 700;
+  font-display: swap;
+  src: url('/polices/oswald.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/polices/inter.woff2') format('woff2');
+}
+
+:root {
+  --retro-teal: #127676;
+  --retro-orange: #E4632E;
+  --retro-jaune: #E3A535;
+  --retro-ink: #0D1617;
+  --retro-paper: #F2EFE6;
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 40px;
+
+  --radius-card: 24px 8px 24px 8px;
+  --radius-card-alt: 8px 24px 8px 24px;
+  --radius-card-sm: 12px 4px 12px 4px;
+  --radius-pill: 50px;
+  --radius-sm: 8px;
+
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--retro-ink);
+  background-color: var(--retro-paper);
+  background-image: url('/fond_art_nouveau.svg');
+  background-size: 320px 320px;
+  background-attachment: fixed;
+}
+
+/* --- Barre du haut ----------------------------------------------------- */
+
+.retro-nav {
+  background: var(--retro-ink);
+  border-bottom: 3px solid var(--retro-teal);
+  padding: var(--space-md) var(--space-xl);
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+}
+.marque {
+  font-family: 'Anton', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--retro-paper);
+  font-size: 1.25rem;
+}
+.retro-nav-sous {
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--retro-jaune);
+  font-size: var(--text-sm);
+}
+
+/* --- Cadre principal --------------------------------------------------- */
+
+.page-frame {
+  background: transparent;
+  border: 3px solid var(--retro-orange);
+  box-shadow: inset 0 0 0 2px var(--retro-teal);
+  border-radius: var(--radius-card);
+  margin: var(--space-md);
+  padding: var(--space-lg);
+  position: relative;
+}
+
+.corner-flourish {
+  position: absolute;
+  color: var(--retro-teal);
+  opacity: 0.6;
+  pointer-events: none;
+  width: 36px;
+  height: 36px;
+}
+.corner-flourish.top-left { top: 8px; left: 8px; }
+.corner-flourish.top-right { top: 8px; right: 8px; transform: scaleX(-1); }
+.corner-flourish.bottom-left { bottom: 8px; left: 8px; transform: scaleY(-1); }
+.corner-flourish.bottom-right { bottom: 8px; right: 8px; transform: scale(-1); }
+
+.atelier {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-lg);
+  padding: var(--space-sm);
+}
+
+/* --- Poste de commande -------------------------------------------------- */
+
+.poste {
+  background: var(--retro-paper);
+  border: 3px solid var(--retro-teal);
+  border-radius: var(--radius-card);
+  box-shadow: inset 0 0 0 2px var(--retro-orange);
+  padding: var(--space-lg);
+  margin: var(--space-sm) var(--space-sm) var(--space-lg);
+}
+.poste-corps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-lg);
+}
+.poste-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-lg);
+  flex: 1;
+  min-width: 16rem;
+}
+.option { display: block; }
+.option-case { display: flex; align-items: center; gap: var(--space-sm); min-height: 44px; }
+.retro-label {
+  font-family: 'Oswald', sans-serif;
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--retro-teal);
+  margin-bottom: var(--space-xs);
+  display: block;
+}
+
+.interrupteur {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  background: var(--retro-ink);
+  color: var(--retro-paper);
+  border: 3px solid var(--retro-teal);
+  border-radius: var(--radius-pill);
+  padding: var(--space-sm) var(--space-lg) var(--space-sm) var(--space-md);
+  cursor: pointer;
+  min-height: 64px;
+  transition: background 0.2s, border-color 0.2s;
+}
+.interrupteur:hover { border-color: var(--retro-jaune); }
+.interrupteur[aria-pressed="true"] { background: var(--retro-teal); }
+.interrupteur:disabled { opacity: 0.6; cursor: progress; }
+
+.temoin {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--retro-orange);
+  box-shadow: 0 0 0 3px rgba(242, 239, 230, 0.25);
+  flex: none;
+}
+.interrupteur[aria-pressed="true"] .temoin {
+  background: var(--retro-jaune);
+  animation: veille 2s ease-in-out infinite;
+}
+@keyframes veille {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(242, 239, 230, 0.25); }
+  50% { box-shadow: 0 0 0 8px rgba(227, 165, 53, 0.35); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .interrupteur[aria-pressed="true"] .temoin { animation: none; }
+}
+
+.interrupteur-texte { text-align: left; }
+.interrupteur-action {
+  display: block;
+  font-family: 'Oswald', sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.interrupteur-etat {
+  display: block;
+  font-family: 'Inter', sans-serif;
+  font-size: var(--text-sm);
+  color: var(--retro-jaune);
+}
+
+.autorisation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-left: 4px solid var(--retro-teal);
+  background: rgba(18, 118, 118, 0.1);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.autorisation.manquante {
+  border-left-color: var(--retro-orange);
+  background: rgba(228, 99, 46, 0.12);
+}
+.autorisation p { margin: 0; flex: 1; min-width: 14rem; font-size: var(--text-sm); }
+
+/* Écarté des deux réglages : il ferme tout, il ne se clique pas par mégarde. */
+.fermer { margin-left: auto; border-color: var(--retro-orange); color: var(--retro-orange); }
+.fermer:hover { background: var(--retro-orange); color: var(--retro-paper); }
+
+.page-frame.ferme { text-align: center; padding: var(--space-xl); background: var(--retro-paper); }
+.page-frame.ferme h1 {
+  font-family: 'Anton', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.journal {
+  margin: var(--space-md) 0 0;
+  padding: var(--space-md);
+  background: var(--retro-ink);
+  color: var(--retro-paper);
+  border-radius: var(--radius-card-sm);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  max-height: 12rem;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+/* --- Colonne des profils ----------------------------------------------- */
+
+.colonne-profils {
+  background: var(--retro-paper);
+  border: 3px solid var(--retro-teal);
+  border-radius: var(--radius-card-alt);
+  box-shadow: inset 0 0 0 2px var(--retro-orange);
+  padding: var(--space-lg);
+  align-self: start;
+}
+
+.titre-section {
+  font-family: 'Anton', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 1.1rem;
+  margin: 0 0 var(--space-md);
+  color: var(--retro-teal);
+}
+
+.liste-profils { list-style: none; margin: 0 0 var(--space-lg); padding: 0; }
+.liste-profils li { margin-bottom: var(--space-sm); }
+
+.profil-bouton {
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+  background: transparent;
+  border: 2px solid var(--retro-teal);
+  border-radius: var(--radius-card-sm);
+  padding: var(--space-sm) var(--space-md);
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  color: var(--retro-ink);
+  transition: background 0.2s, color 0.2s;
+}
+.profil-bouton:hover { background: rgba(18, 118, 118, 0.12); }
+.profil-bouton[aria-current="true"] {
+  background: var(--retro-teal);
+  color: var(--retro-paper);
+  box-shadow: inset 0 0 0 2px var(--retro-orange);
+}
+.profil-nom {
+  display: block;
+  font-family: 'Oswald', sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.profil-detail { display: block; font-size: var(--text-sm); opacity: 0.8; }
+.profil-bouton.casse { border-color: var(--retro-orange); }
+
+.actions-globales { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+
+/* --- Colonne de la table ----------------------------------------------- */
+
+.colonne-table {
+  background: var(--retro-paper);
+  border: 3px solid var(--retro-teal);
+  border-radius: var(--radius-card);
+  box-shadow: inset 0 0 0 2px var(--retro-orange);
+  padding: var(--space-lg);
+  min-width: 0;
+}
+
+.entete-profil {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+.entete-profil h1 {
+  font-family: 'Anton', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: clamp(1.4rem, 4vw, 2rem);
+  margin: 0;
+}
+.sous-titre { font-size: var(--text-sm); opacity: 0.75; margin: 0; }
+.boutons { margin-left: auto; display: flex; gap: var(--space-sm); align-items: center; }
+
+.table-commandes {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: var(--space-md);
+}
+.table-commandes th {
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: var(--text-sm);
+  color: var(--retro-teal);
+  text-align: left;
+  padding: var(--space-sm);
+  border-bottom: 2px solid var(--retro-teal);
+}
+.table-commandes td {
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: 1px solid rgba(18, 118, 118, 0.25);
+  vertical-align: top;
+}
+/* Les formulations sont le geste courant de cette page : la colonne qui les porte
+   est la plus large, celle des touches la plus étroite. */
+.col-actif { width: 4.5rem; }
+/* Les champs de la table respirent moins que ceux du poste de commande :
+   « cmd+alt+p » doit tenir en entier sur un écran de portable. */
+.table-commandes .retro-input { padding-left: 0.4rem; padding-right: 0.4rem; }
+.table-commandes th:nth-child(2) { width: 18%; }
+.table-commandes th:nth-child(3) { width: 19%; }
+.table-commandes th:nth-child(4) { width: auto; }
+.table-commandes th:last-child { width: 3.5rem; }
+.table-commandes tr.interne td { background: rgba(18, 118, 118, 0.06); }
+.table-commandes tr.fautive td { background: rgba(228, 99, 46, 0.1); }
+
+.retro-input {
+  background: var(--retro-paper);
+  border: 2px solid var(--retro-teal);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.6rem;
+  font-family: 'Inter', sans-serif;
+  font-size: var(--text-md);
+  color: var(--retro-ink);
+  width: 100%;
+  min-height: 44px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.retro-input:focus {
+  outline: none;
+  border-color: var(--retro-jaune);
+  box-shadow: 0 0 0 3px rgba(227, 165, 53, 0.3);
+}
+.retro-input.error { border-color: var(--retro-orange); }
+.retro-input:disabled { background: rgba(13, 22, 23, 0.06); color: rgba(13, 22, 23, 0.55); }
+
+.case-actif { width: 22px; height: 22px; accent-color: var(--retro-teal); }
+
+.refus-ligne {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--retro-orange);
+  margin-top: var(--space-xs);
+}
+
+.supprimer {
+  background: transparent;
+  border: 2px solid transparent;
+  color: var(--retro-orange);
+  font-size: 1.2rem;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  min-height: 44px;
+  min-width: 44px;
+}
+.supprimer:hover { border-color: var(--retro-orange); }
+.supprimer:disabled { color: rgba(13, 22, 23, 0.3); cursor: not-allowed; }
+
+/* --- Boutons ------------------------------------------------------------ */
+
+.retro-btn-pill {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: var(--radius-pill);
+  border: 3px solid var(--retro-teal);
+  overflow: hidden;
+  cursor: pointer;
+  background: none;
+  padding: 0;
+  min-height: 44px;
+  transition: filter 0.15s ease;
+}
+.retro-btn-pill:hover { filter: brightness(1.1); }
+.retro-btn-pill:active { filter: brightness(0.95); }
+.retro-btn-pill .label {
+  background: var(--retro-jaune);
+  color: var(--retro-ink);
+  padding: 0.6rem 1.5rem;
+  font-family: 'Oswald', sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+}
+.retro-btn-pill .icon {
+  background: var(--retro-orange);
+  color: var(--retro-paper);
+  width: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.retro-btn-ghost {
+  border: 2px solid var(--retro-teal);
+  color: var(--retro-teal);
+  background: transparent;
+  border-radius: var(--radius-pill);
+  padding: 0.5rem 1.2rem;
+  font-family: 'Oswald', sans-serif;
+  font-weight: 700;
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  transition: background 0.2s, color 0.2s;
+}
+.retro-btn-ghost:hover { background: var(--retro-teal); color: var(--retro-paper); }
+.fichier { cursor: pointer; }
+
+:focus-visible { outline: 3px solid var(--retro-jaune); outline-offset: 2px; }
+
+/* --- Bandeau de retour -------------------------------------------------- */
+
+.bandeau {
+  padding: var(--space-md);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  margin-bottom: var(--space-md);
+}
+.bandeau.succes { background: rgba(18, 118, 118, 0.1); border-left: 4px solid var(--retro-teal); }
+.bandeau.echec { background: rgba(228, 99, 46, 0.1); border-left: 4px solid var(--retro-orange); }
+.bandeau ul { margin: var(--space-sm) 0 0; padding-left: 1.2rem; }
+.bandeau p { margin: 0; font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.note { font-size: var(--text-sm); opacity: 0.75; line-height: 1.5; }
+
+.visuellement-cache {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* --- Pied de page ------------------------------------------------------- */
+
+.retro-footer {
+  background: var(--retro-ink);
+  border-top: 3px solid var(--retro-teal);
+  padding: var(--space-lg) var(--space-xl);
+  color: var(--retro-paper);
+  text-align: center;
+}
+.retro-footer-ornament { color: var(--retro-teal); font-size: 1.5rem; margin: 0 0 var(--space-md); }
+.retro-footer-credit {
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 var(--space-xs);
+}
+.retro-footer-licence { font-size: var(--text-sm); color: rgba(242, 239, 230, 0.6); margin: 0; }
+.retro-footer-link {
+  color: var(--retro-jaune);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+.retro-footer-link:hover { border-bottom-color: var(--retro-jaune); }
+
+/* --- Écrans larges ------------------------------------------------------ */
+
+@media (min-width: 900px) {
+  .page-frame { margin: var(--space-xl); padding: var(--space-xl); }
+  .atelier { grid-template-columns: 18rem 1fr; }
+  .corner-flourish { width: 48px; height: 48px; }
+}

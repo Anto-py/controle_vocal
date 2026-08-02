@@ -18,7 +18,11 @@ import argparse
 import sys
 import time
 
-from ApplicationServices import AXIsProcessTrusted
+from ApplicationServices import (
+    AXIsProcessTrusted,
+    AXIsProcessTrustedWithOptions,
+    kAXTrustedCheckOptionPrompt,
+)
 from Quartz import (
     CGEventCreateKeyboardEvent,
     CGEventPost,
@@ -149,8 +153,27 @@ def analyser(combinaison: str) -> tuple[int, int]:
 
 
 def accessibilite_accordee() -> bool:
-    """Sans cette autorisation, les frappes partent dans le vide sans erreur."""
+    """Sans cette autorisation, les frappes partent dans le vide sans erreur.
+
+    Constate, sans demander : à appeler autant qu'on veut, y compris en boucle.
+    """
     return bool(AXIsProcessTrusted())
+
+
+def demander_accessibilite() -> bool:
+    """Demande l'autorisation, ce qui inscrit l'application dans le panneau des
+    Réglages système et y affiche l'invite du système.
+
+    Distinction qui a coûté une inspection : `AXIsProcessTrusted` **constate**,
+    elle n'inscrit rien. Une application qui ne demande jamais n'apparaît jamais
+    dans la liste d'Accessibilité, et l'autorisation dont elle profite est alors
+    celle d'un autre maillon de la chaîne, l'interpréteur par exemple, qui la perd
+    à la première mise à jour changeant son chemin.
+
+    Rend l'état au moment de l'appel : l'autorisation venant d'être demandée est
+    encore fausse, l'utilisateur devant cocher la case et relancer.
+    """
+    return bool(AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: True}))
 
 
 def envoyer(combinaison: str) -> None:

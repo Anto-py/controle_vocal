@@ -82,6 +82,34 @@ Canva,com.canva.CanvaDesktop,suivante,droite,suivante|suite|avance,oui
 
 Une ligne dont la colonne `touches` est vide n'envoie rien : c'est ainsi qu'un raccourci non encore vérifié reste visible sans agir.
 
+## Fenêtre de réglages
+
+Une page web locale édite les profils et met l'outil en marche. Elle ne sert qu'à la boucle locale et ne parle à aucun réseau, polices comprises.
+
+```sh
+uv run -m controle_vocal.reglages
+uv run -m controle_vocal.reglages --port 9000 --sans-navigateur
+```
+
+Le terminal n'est pas obligé : une application macOS fait la même chose d'un double-clic, et c'est la façon recommandée.
+
+```sh
+uv run outils/fabriquer_app.py
+uv run outils/fabriquer_app.py --vers ~/Applications
+```
+
+La fabrication compile un petit lanceur en C et signe l'application, ce qui exige les outils en ligne de commande d'Xcode (`xcode-select --install`). Ce n'est pas du zèle : macOS n'accorde d'autorisation ni à un script, dont le processus réel est `/bin/bash`, ni à une application non signée, qu'il ne sait pas identifier.
+
+L'autorisation Accessibilité s'accorde alors une fois à « Contrôle vocal », dans Réglages système, et cesse de dépendre du terminal ouvert ce jour-là. La page affiche en permanence si elle est accordée, et propose de la demander sinon. L'application n'est pas fournie, elle se fabrique : elle porte les chemins de votre machine. Après une modification du code, la relancer suffit ; la refabriquer n'est utile que si le projet déménage.
+
+Les réglages se ferment depuis la page, bouton « Fermer les réglages », qui arrête aussi la télécommande.
+
+L'interrupteur en tête de page lance et arrête la télécommande, profil épinglé et pastille au choix. Il dit l'état réel plutôt que le dernier ordre reçu : un outil qui s'arrête seul, micro débranché ou « extinction » dite à la voix, y apparaît arrêté dans les deux secondes, avec les dernières lignes de sa sortie s'il a échoué. La télécommande ne survit pas à la fermeture des réglages.
+
+Elle refuse d'écrire ce que le lancement refuserait : touche que le clavier ignore, action interne inventée, nom de commande en double, formulation qui sert déjà à une autre commande. Le refus dit la cause et la solution à côté du champ fautif, et le fichier reste intact. Le geste courant y est l'ajout d'une formulation ; les touches, elles, arrivent d'ordinaire par import d'un CSV rempli en amont.
+
+Un profil enregistré est pris sans rien redémarrer, l'outil relisant ses profils à chaque changement d'application.
+
 ## Ce qui protège des déclenchements non voulus
 
 Deux choses. D'abord le motif « mot de réveil, puis commande, et rien après » : la grammaire fermée du moteur ne rejette pas ce qu'elle ne connaît pas, elle y rabat le son, si bien qu'une phrase de cours ressort en commandes enchaînées. Ensuite le seuil (`--seuil`, 0,90 par défaut), qui porte sur le **mot le plus faible** de l'énoncé et non sur la moyenne : une moyenne laisserait un mot sûr racheter un mot douteux.

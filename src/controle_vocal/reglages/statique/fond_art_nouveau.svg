@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320">
+  <!-- Motif de remplacement, dessiné faute du dossier de fonds de la charte.
+       Coup de fouet Horta : une tige qui part d'un angle, s'enroule, bourgeonne. -->
+  <rect width="320" height="320" fill="#F2EFE6"/>
+  <g fill="none" stroke="#127676" stroke-width="1.6" opacity="0.22" stroke-linecap="round">
+    <path d="M0 320 C 60 250, 40 170, 110 140 C 180 110, 150 40, 200 0"/>
+    <path d="M110 140 C 150 150, 175 130, 180 95 C 150 100, 120 115, 110 140 Z" fill="#127676" opacity="0.5" stroke="none"/>
+    <path d="M320 0 C 260 70, 280 150, 210 180 C 140 210, 170 280, 120 320"/>
+    <path d="M210 180 C 170 170, 145 190, 140 225 C 170 220, 200 205, 210 180 Z" fill="#127676" opacity="0.5" stroke="none"/>
+    <path d="M0 60 C 50 90, 70 60, 90 20"/>
+    <path d="M320 260 C 270 230, 250 260, 230 300"/>
+    <circle cx="200" cy="0" r="4" fill="#127676" stroke="none" opacity="0.6"/>
+    <circle cx="120" cy="320" r="4" fill="#127676" stroke="none" opacity="0.6"/>
+    <circle cx="90" cy="20" r="3" fill="#E4632E" stroke="none" opacity="0.7"/>
+    <circle cx="230" cy="300" r="3" fill="#E4632E" stroke="none" opacity="0.7"/>
+  </g>
+</svg>

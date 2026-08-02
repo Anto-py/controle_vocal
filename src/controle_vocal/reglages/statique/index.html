@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Réglages — controle_vocal</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<nav class="retro-nav">
+  <span class="marque">Contrôle vocal</span>
+  <span class="retro-nav-sous">Réglages des profils</span>
+</nav>
+
+<div class="page-frame">
+  <svg class="corner-flourish top-left" viewBox="0 0 50 50" aria-hidden="true"><use href="#coin"/></svg>
+  <svg class="corner-flourish top-right" viewBox="0 0 50 50" aria-hidden="true"><use href="#coin"/></svg>
+  <svg class="corner-flourish bottom-left" viewBox="0 0 50 50" aria-hidden="true"><use href="#coin"/></svg>
+  <svg class="corner-flourish bottom-right" viewBox="0 0 50 50" aria-hidden="true"><use href="#coin"/></svg>
+
+  <section class="poste" aria-labelledby="titre-poste">
+    <h2 id="titre-poste" class="titre-section">La télécommande</h2>
+
+    <div class="poste-corps">
+      <button type="button" id="interrupteur" class="interrupteur" aria-pressed="false">
+        <span class="temoin" aria-hidden="true"></span>
+        <span class="interrupteur-texte">
+          <span class="interrupteur-action">Mettre en marche</span>
+          <span class="interrupteur-etat" id="etat-moteur">arrêtée</span>
+        </span>
+      </button>
+
+      <div class="poste-options">
+        <label class="option">
+          <span class="retro-label">Profil</span>
+          <select class="retro-input" id="option-profil">
+            <option value="">Suit l'application au premier plan</option>
+          </select>
+        </label>
+        <label class="option option-case">
+          <input type="checkbox" id="option-pastille" class="case-actif" checked>
+          <span>Pastille sur la projection</span>
+        </label>
+        <button type="button" class="retro-btn-ghost fermer" id="fermer">Fermer les réglages</button>
+      </div>
+    </div>
+
+    <div id="autorisation" class="autorisation" hidden>
+      <p id="autorisation-texte"></p>
+      <button type="button" class="retro-btn-ghost" id="autorisation-demander">
+        Demander l'autorisation
+      </button>
+    </div>
+
+    <pre id="journal-moteur" class="journal" hidden aria-live="polite"></pre>
+  </section>
+
+  <div class="atelier">
+
+    <aside class="colonne-profils">
+      <h2 class="titre-section">Profils</h2>
+      <ul id="liste-profils" class="liste-profils" aria-label="Profils disponibles"></ul>
+
+      <div class="actions-globales">
+        <a class="retro-btn-ghost" href="/api/gabarit" download="_gabarit.csv">Gabarit CSV</a>
+        <label class="retro-btn-ghost fichier">
+          Importer
+          <input type="file" id="import" accept=".csv,text/csv" hidden>
+        </label>
+      </div>
+      <p class="note">L'import remplace le profil ouvert par le fichier choisi.</p>
+    </aside>
+
+    <main class="colonne-table">
+      <header class="entete-profil">
+        <h1 id="titre-profil">…</h1>
+        <p id="sous-titre-profil" class="sous-titre"></p>
+        <div class="boutons">
+          <a class="retro-btn-ghost" id="lien-export" href="#" download>Exporter</a>
+          <button class="retro-btn-pill" id="enregistrer" type="button">
+            <span class="label">Enregistrer</span><span class="icon">↳</span>
+          </button>
+        </div>
+      </header>
+
+      <div id="bandeau" class="bandeau" hidden></div>
+
+      <table class="table-commandes">
+        <thead>
+          <tr>
+            <th scope="col" class="col-actif">Active</th>
+            <th scope="col">Commande</th>
+            <th scope="col">Touches</th>
+            <th scope="col">Ce qu'on dit</th>
+            <th scope="col"><span class="visuellement-cache">Supprimer</span></th>
+          </tr>
+        </thead>
+        <tbody id="corps-table"></tbody>
+      </table>
+
+      <button class="retro-btn-ghost" id="ajouter" type="button">+ Une commande</button>
+
+      <p class="note">
+        Les formulations se séparent par une barre verticale. Une ligne sans touche
+        n'envoie rien, même active : c'est ainsi qu'un raccourci non vérifié reste
+        au fichier sans agir.
+      </p>
+    </main>
+
+  </div>
+</div>
+
+<footer class="retro-footer">
+  <p class="retro-footer-ornament">❧</p>
+  <p class="retro-footer-credit">
+    Made by <a class="retro-footer-link" href="https://www.linkedin.com/in/antonin-bareau/">Antonin Bareau</a>
+  </p>
+  <p class="retro-footer-licence">
+    <a class="retro-footer-link" href="https://creativecommons.org/licenses/by-nc-sa/4.0/">Licence creative common : CC-by-nc-sa</a>
+  </p>
+</footer>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="coin" viewBox="0 0 50 50">
+    <path d="M5 5 Q15 5, 15 15 Q15 25, 5 25 M5 5 Q5 15, 15 15 Q25 15, 25 5"
+          fill="none" stroke="currentColor" stroke-width="2"/>
+    <circle cx="8" cy="8" r="3" fill="currentColor"/>
+    <path d="M20 3 Q30 8, 25 20 Q35 15, 45 8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <circle cx="25" cy="20" r="2" fill="currentColor"/>
+  </symbol>
+</svg>
+
+<script src="/app.js"></script>
+</body>
+</html>
