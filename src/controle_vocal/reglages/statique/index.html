@@ -88,11 +88,19 @@
       <div class="actions-globales">
         <a class="retro-btn-ghost" href="/api/gabarit" download="_gabarit.csv">Gabarit CSV</a>
         <label class="retro-btn-ghost fichier">
+          + Un profil
+          <input type="file" id="nouveau-profil" accept=".csv,text/csv" hidden>
+        </label>
+        <label class="retro-btn-ghost fichier">
           Importer
           <input type="file" id="import" accept=".csv,text/csv" hidden>
         </label>
       </div>
-      <p class="note">L'import remplace le profil ouvert par le fichier choisi.</p>
+      <p class="note">
+        « + Un profil » ajoute un profil de plus, nommé d'après le fichier choisi
+        et sans toucher aux autres. « Importer » remplace le contenu du profil
+        ouvert par le fichier choisi.
+      </p>
       <p class="note">Fichiers dans <code id="dossier-profils" class="chemin">…</code></p>
     </aside>
 
@@ -101,6 +109,9 @@
         <h1 id="titre-profil">…</h1>
         <p id="sous-titre-profil" class="sous-titre"></p>
         <div class="boutons">
+          <button class="retro-btn-ghost peril" id="supprimer-profil" type="button">
+            Supprimer
+          </button>
           <a class="retro-btn-ghost" id="lien-export" href="#" download>Exporter</a>
           <button class="retro-btn-pill" id="enregistrer" type="button">
             <span class="label">Enregistrer</span><span class="icon">↳</span>

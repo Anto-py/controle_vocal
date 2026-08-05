@@ -498,7 +498,17 @@ async function chargerListe() {
   if (charge.dossier) $("dossier-profils").textContent = charge.dossier;
   rendreListeProfils(charge.profils);
   remplirChoixProfils(charge.profils);
-  if (!etat.profil && charge.profils.length) {
+  if (charge.profils.length === 0) {
+    // Dossier vide, ce qui n'arrive qu'après avoir tout supprimé : sans ce cas,
+    // l'en-tête et la table garderaient à l'écran le profil qui vient de partir.
+    etat.profil = null;
+    etat.lignes = [];
+    $("titre-profil").textContent = "Aucun profil";
+    $("sous-titre-profil").textContent = "En ajouter un par « + Un profil ».";
+    $("supprimer-profil").disabled = true;
+    return rendreTable();
+  }
+  if (!etat.profil) {
     await ouvrirProfil(charge.profils[0].nom);
   }
 }
@@ -516,6 +526,14 @@ async function ouvrirProfil(nom) {
   $("sous-titre-profil").textContent = `${application} · ${bundle}`;
   $("lien-export").href = `/api/profils/${nom}/export`;
   $("lien-export").setAttribute("download", `${nom}.csv`);
+
+  // Le serveur dit lequel se protège, la page ne le devine pas : c'est lui qui
+  // refuserait, et son verdict est le seul qui compte.
+  const supprimer = $("supprimer-profil");
+  supprimer.disabled = Boolean(charge.protege);
+  supprimer.title = charge.protege
+    ? "Le profil de repli ne se supprime pas : sans lui, la télécommande refuse de démarrer."
+    : `Supprimer le profil « ${nom} »`;
   $("bandeau").hidden = true;
   rendreTable();
   await chargerListe();
@@ -560,21 +578,110 @@ function ajouterLigne() {
   if (dernier) dernier.focus();
 }
 
-async function importer(fichier) {
+async function importer(fichier, nom = etat.profil) {
   const texte = await fichier.text();
-  const { ok, charge } = await demander(`/api/profils/${etat.profil}/import`, {
+  const { ok, charge } = await demander(`/api/profils/${nom}/import`, {
     method: "POST",
     headers: { "Content-Type": "text/csv" },
     body: texte,
   });
   if (ok) {
-    afficherBandeau("succes", `« ${fichier.name} » importé dans « ${etat.profil} ».`);
-    return ouvrirProfil(etat.profil);
+    // Le bandeau vient après l'ouverture, jamais avant : `ouvrirProfil` le
+    // masque en repartant du fichier relu, et le succès passait inaperçu.
+    await ouvrirProfil(nom);
+    return afficherBandeau("succes", `« ${fichier.name} » importé dans « ${nom} ».`);
   }
   const refus = charge.refus || [{ ligne: 0, message: charge.erreur }];
   afficherBandeau(
     "echec",
     "Import refusé, le profil est intact.",
+    refus.map((r) => (r.ligne ? `Ligne ${r.ligne} : ${r.message}` : r.message)),
+  );
+}
+
+async function supprimerProfil() {
+  const nom = etat.profil;
+  if (!nom) return;
+  // Le fichier part pour de bon, sans corbeille ni version antérieure : la
+  // confirmation dit donc ce qui disparaît, et rappelle l'export d'à côté.
+  const perdu = etat.lignes.length;
+  if (
+    !window.confirm(
+      `Supprimer le profil « ${nom} » et ses ${perdu} ligne${perdu > 1 ? "s" : ""} ?\n\n`
+        + "Le fichier est effacé pour de bon. « Exporter » en garde une copie avant.",
+    )
+  ) {
+    return;
+  }
+
+  const { ok, charge } = await demander(`/api/profils/${nom}`, { method: "DELETE" });
+  if (!ok) {
+    return afficherBandeau("echec", `Suppression refusée, « ${nom} » est intact.`, [
+      charge.erreur || "",
+    ]);
+  }
+
+  // Plus de profil ouvert : `chargerListe` ouvre alors le premier qui reste.
+  etat.profil = null;
+  etat.lignes = [];
+  await chargerListe();
+  afficherBandeau("succes", `Profil « ${nom} » supprimé.`, [
+    "Redémarrer la télécommande pour qu'elle cesse de l'écouter : elle lit ses "
+      + "fichiers au lancement, et garde en mémoire ce qu'elle y a trouvé.",
+  ]);
+}
+
+/* Nom proposé pour un profil créé : celui du fichier, ramené à la convention.
+ * C'est une commodité, pas un contrôle : la page ne décide pas de ce qui est
+ * valide, elle épargne seulement un aller-retour de refus sur « Chrome (1).csv ».
+ * Le serveur garde le dernier mot, et son message s'affiche tel quel. */
+function nomPropose(fichier) {
+  return fichier.name
+    .replace(/\.csv$/i, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")   // dépose les accents restés à part
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+async function creerProfil(fichier) {
+  const saisi = window.prompt(
+    "Nom du nouveau profil, en minuscules, chiffres et soulignés :",
+    nomPropose(fichier),
+  );
+  if (saisi === null) return;
+  const nom = saisi.trim();
+
+  const { ok, code, charge } = await demander(`/api/profils/${nom}/creer`, {
+    method: "POST",
+    headers: { "Content-Type": "text/csv" },
+    body: await fichier.text(),
+  });
+
+  if (ok) {
+    await ouvrirProfil(nom);
+    return afficherBandeau("succes", `Profil « ${nom} » créé depuis « ${fichier.name} ».`, [
+      "Redémarrer la télécommande pour qu'elle le prenne : elle lit ses fichiers "
+        + "au lancement, et garde en mémoire ce qu'elle y a trouvé.",
+    ]);
+  }
+
+  // Un profil du même nom est déjà là. Le remplacer se demande, il ne se devine
+  // pas : l'ancien contenu n'a pas de version antérieure où revenir.
+  if (code === 409) {
+    const remplacer = window.confirm(
+      `Le profil « ${nom} » existe déjà.\n\n`
+        + `Remplacer tout son contenu par « ${fichier.name} » ? Ce qu'il contient sera perdu.`,
+    );
+    if (remplacer) return importer(fichier, nom);
+    return afficherBandeau("echec", `Rien n'a été écrit : « ${nom} » existe déjà.`);
+  }
+
+  const refus = charge.refus || [{ ligne: 0, message: charge.erreur }];
+  afficherBandeau(
+    "echec",
+    "Création refusée, aucun fichier n'a été écrit.",
     refus.map((r) => (r.ligne ? `Ligne ${r.ligne} : ${r.message}` : r.message)),
   );
 }
@@ -589,12 +696,20 @@ async function demarrer() {
   $("enregistrer").addEventListener("click", enregistrer);
   $("enregistrer-actions").addEventListener("click", enregistrerActions);
   $("ajouter").addEventListener("click", ajouterLigne);
+  $("supprimer-profil").addEventListener("click", supprimerProfil);
   $("interrupteur").addEventListener("click", basculerMoteur);
   $("fermer").addEventListener("click", fermerReglages);
   $("autorisation-demander").addEventListener("click", demanderAutorisation);
   $("import").addEventListener("change", (evenement) => {
     const [fichier] = evenement.target.files;
     if (fichier) importer(fichier);
+    evenement.target.value = "";
+  });
+  // Remis à vide après coup, sans quoi choisir deux fois le même fichier ne
+  // déclencherait rien : le champ ne change pas de valeur.
+  $("nouveau-profil").addEventListener("change", (evenement) => {
+    const [fichier] = evenement.target.files;
+    if (fichier) creerProfil(fichier);
     evenement.target.value = "";
   });
 

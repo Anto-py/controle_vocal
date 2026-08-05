@@ -204,6 +204,118 @@ def test_import_fautif_ne_cree_rien(reglages: Reglages, dossier: Path) -> None:
     assert not (dossier / "keynote.csv").exists()
 
 
+# --- Création d'un profil ---------------------------------------------------
+
+
+def test_creation_ajoute_un_profil_au_dossier(reglages: Reglages, dossier: Path) -> None:
+    csv_nouveau = EN_TETE + "Chrome,com.google.Chrome,recharger,b,recharge,oui\n"
+    reponse = router(
+        reglages, "POST", "/api/profils/chrome/creer", csv_nouveau.encode("utf-8")
+    )
+    assert reponse.code == 201
+    assert (dossier / "chrome.csv").exists()
+    noms = [p["nom"] for p in charge(router(reglages, "GET", "/api/profils"))["profils"]]
+    assert noms == ["canva", "chrome", "defaut"]
+
+
+def test_creation_ne_recouvre_pas_un_profil_existant(
+    reglages: Reglages, dossier: Path
+) -> None:
+    """Le geste qui remplace et celui qui ajoute ne se confondent pas : un profil
+    éprouvé en séance n'a pas de version antérieure où revenir."""
+    csv_nouveau = EN_TETE + "Chrome,com.google.Chrome,recharger,b,recharge,oui\n"
+    reponse = router(
+        reglages, "POST", "/api/profils/canva/creer", csv_nouveau.encode("utf-8")
+    )
+    assert reponse.code == 409
+    assert (dossier / "canva.csv").read_text(encoding="utf-8") == CANVA
+
+
+def test_creation_fautive_n_ecrit_aucun_fichier(reglages: Reglages, dossier: Path) -> None:
+    csv_nouveau = EN_TETE + "Chrome,com.google.Chrome,recharger,inconnue,recharge,oui\n"
+    reponse = router(
+        reglages, "POST", "/api/profils/chrome/creer", csv_nouveau.encode("utf-8")
+    )
+    assert reponse.code == 422
+    assert not (dossier / "chrome.csv").exists()
+
+
+def test_creation_sans_les_colonnes_est_refusee(reglages: Reglages, dossier: Path) -> None:
+    reponse = router(reglages, "POST", "/api/profils/chrome/creer", b"a,b\n1,2\n")
+    assert reponse.code == 422
+    assert "gabarit" in charge(reponse)["refus"][0]["message"]
+    assert not (dossier / "chrome.csv").exists()
+
+
+def test_creation_sous_un_nom_hors_convention_est_refusee(
+    reglages: Reglages, dossier: Path
+) -> None:
+    reponse = router(reglages, "POST", "/api/profils/Mon Profil/creer", EN_TETE.encode())
+    assert reponse.code == 400
+    assert list(dossier.glob("*.csv")) != []
+    assert not (dossier / "Mon Profil.csv").exists()
+
+
+def test_le_profil_cree_se_charge(reglages: Reglages, dossier: Path) -> None:
+    """Le contrôle porte sur ce que fera le lancement, pas sur la forme du CSV."""
+    csv_nouveau = EN_TETE + "Chrome,com.google.Chrome,recharger,b,recharge,oui\n"
+    router(reglages, "POST", "/api/profils/chrome/creer", csv_nouveau.encode("utf-8"))
+    profil = profils.charger(dossier / "chrome.csv")
+    assert profil.resoudre("recharge").touches == "b"
+
+
+# --- Suppression d'un profil ------------------------------------------------
+
+
+def test_suppression_retire_le_fichier(reglages: Reglages, dossier: Path) -> None:
+    reponse = router(reglages, "DELETE", "/api/profils/canva")
+    assert reponse.code == 200
+    assert not (dossier / "canva.csv").exists()
+    noms = [p["nom"] for p in charge(router(reglages, "GET", "/api/profils"))["profils"]]
+    assert noms == ["defaut"]
+
+
+def test_le_profil_de_repli_ne_se_supprime_pas(reglages: Reglages, dossier: Path) -> None:
+    """Sans repli, le lancement échoue avant d'écouter : le geste serait
+    réversible sur le papier, et découvert devant la classe."""
+    reponse = router(reglages, "DELETE", "/api/profils/defaut")
+    assert reponse.code == 403
+    assert (dossier / "defaut.csv").exists()
+
+
+def test_suppression_d_un_profil_inconnu_rend_404(reglages: Reglages) -> None:
+    assert router(reglages, "DELETE", "/api/profils/keynote").code == 404
+
+
+def test_suppression_hors_convention_de_nom_est_refusee(
+    reglages: Reglages, dossier: Path
+) -> None:
+    """Deux barrières distinctes : le nom que `chemin` refuse, et le chemin qui
+    n'atteint aucune route parce qu'il porte une barre oblique."""
+    assert router(reglages, "DELETE", "/api/profils/Canva").code == 400
+    assert router(reglages, "DELETE", "/api/profils/../secret").code == 404
+    assert (dossier / "canva.csv").exists()
+
+
+def test_la_lecture_dit_si_le_profil_se_protege(reglages: Reglages) -> None:
+    """La page apprend d'ici quels profils sont intouchables : une liste recopiée
+    dans le navigateur finirait par diverger de celle qui commande."""
+    assert charge(router(reglages, "GET", "/api/profils/defaut"))["protege"] is True
+    assert charge(router(reglages, "GET", "/api/profils/canva"))["protege"] is False
+
+
+def test_le_profil_supprime_puis_recree_repart_a_neuf(
+    reglages: Reglages, dossier: Path
+) -> None:
+    csv_nouveau = EN_TETE + "Chrome,com.google.Chrome,recharger,b,recharge,oui\n"
+    router(reglages, "DELETE", "/api/profils/canva")
+    reponse = router(
+        reglages, "POST", "/api/profils/canva/creer", csv_nouveau.encode("utf-8")
+    )
+    assert reponse.code == 201
+    assert (dossier / "canva.csv").read_text(encoding="utf-8") == csv_nouveau
+
+
 # --- Divers ----------------------------------------------------------------
 
 

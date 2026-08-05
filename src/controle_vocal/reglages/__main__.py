@@ -98,6 +98,9 @@ class Poignee(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         self._repondre("POST")
 
+    def do_DELETE(self) -> None:  # noqa: N802
+        self._repondre("DELETE")
+
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002
         """Une ligne par requête, sur la sortie d'erreur, sans horodatage bavard."""
         print(f"  {format % args}", file=sys.stderr)

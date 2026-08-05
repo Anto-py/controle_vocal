@@ -90,7 +90,10 @@ def test_gabarit_vide_se_charge_sans_commande_propre() -> None:
 
 def test_gabarit_exclu_du_chargement_en_masse() -> None:
     tous = profils.charger_tous(DOSSIER_PROFILS)
-    assert set(tous) == {"canva", "defaut"}
+    # Le contrôle porte sur le préfixe `_`, pas sur l'inventaire des profils
+    # livrés : en figer la liste ferait échouer ce test à chaque profil ajouté.
+    assert {"canva", "defaut"} <= set(tous)
+    assert not [nom for nom in tous if nom.startswith("_")]
 
 
 def test_phrase_en_double_est_refusee(tmp_path: Path) -> None:

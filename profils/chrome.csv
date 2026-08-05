@@ -1,0 +1,26 @@
+application,bundle_id,commande,touches,phrases,actif
+Chrome,com.google.Chrome,onglet_suivant,cmd+alt+droite,onglet suivant|suivant,oui
+Chrome,com.google.Chrome,onglet_precedent,cmd+alt+gauche,onglet précédent|précédent,oui
+Chrome,com.google.Chrome,premier_onglet,cmd+1,premier onglet,oui
+Chrome,com.google.Chrome,deuxieme_onglet,cmd+2,deuxième onglet,oui
+Chrome,com.google.Chrome,troisieme_onglet,cmd+3,troisième onglet,oui
+Chrome,com.google.Chrome,dernier_onglet,cmd+9,dernier onglet,oui
+Chrome,com.google.Chrome,nouvel_onglet,cmd+t,nouvel onglet,oui
+Chrome,com.google.Chrome,rouvrir_onglet,cmd+maj+t,rouvre onglet,oui
+Chrome,com.google.Chrome,fermer_onglet,,ferme onglet,non
+Chrome,com.google.Chrome,page_precedente,cmd+gauche,retour|recule,oui
+Chrome,com.google.Chrome,page_suivante,cmd+droite,avance|suite,oui
+Chrome,com.google.Chrome,recharger,cmd+r,recharge|actualise,oui
+Chrome,com.google.Chrome,arreter,echap,arrête,oui
+Chrome,com.google.Chrome,descendre,espace,descends|plus bas,oui
+Chrome,com.google.Chrome,monter,maj+espace,monte|plus haut,oui
+Chrome,com.google.Chrome,haut_de_page,debut,tout en haut,oui
+Chrome,com.google.Chrome,bas_de_page,fin,tout en bas,oui
+Chrome,com.google.Chrome,plein_ecran,ctrl+cmd+f,plein écran,oui
+Chrome,com.google.Chrome,zoom_normal,cmd+0,taille normale,oui
+Chrome,com.google.Chrome,zoom_avant,,agrandis|zoom,non
+Chrome,com.google.Chrome,zoom_arriere,,réduis,non
+Chrome,com.google.Chrome,rechercher,cmd+f,cherche,oui
+Chrome,com.google.Chrome,barre_adresse,cmd+l,adresse,oui
+Chrome,com.google.Chrome,historique,cmd+y,historique,oui
+Chrome,com.google.Chrome,nouvelle_fenetre,cmd+n,nouvelle fenêtre,oui

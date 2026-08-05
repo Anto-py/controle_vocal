@@ -485,6 +485,17 @@ body {
 .retro-btn-ghost:hover { background: var(--retro-teal); color: var(--retro-paper); }
 .fichier { cursor: pointer; }
 
+/* Un geste sans retour prend la couleur d'accent, mais seulement sous la main :
+   au repos il reste un bouton parmi les autres, pour ne pas crier en permanence. */
+.peril { border-color: var(--retro-orange); color: var(--retro-orange); }
+.peril:hover { background: var(--retro-orange); color: var(--retro-paper); }
+.retro-btn-ghost:disabled {
+  border-color: rgba(13, 22, 23, 0.25);
+  color: rgba(13, 22, 23, 0.35);
+  cursor: not-allowed;
+}
+.retro-btn-ghost:disabled:hover { background: transparent; color: rgba(13, 22, 23, 0.35); }
+
 :focus-visible { outline: 3px solid var(--retro-jaune); outline-offset: 2px; }
 
 /* --- Bandeau de retour -------------------------------------------------- */

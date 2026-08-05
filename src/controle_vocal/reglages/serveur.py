@@ -32,6 +32,12 @@ DOSSIER_STATIQUE = Path(__file__).resolve().parent / "statique"
 #: contre la traversée de répertoire.
 NOM_DE_PROFIL = re.compile(r"^[a-z0-9_]{1,64}$")
 
+#: Profils qu'on ne supprime pas depuis l'interface. Sans le repli, une
+#: application inconnue au premier plan laisserait la séance sans commande, et le
+#: lancement échoue avant même d'écouter (`decision.Decideur`). Le geste serait
+#: donc réversible sur le papier, et découvert devant la classe.
+PROFILS_PROTEGES = frozenset({profils.PROFIL_DE_REPLI})
+
 TYPES_STATIQUES = {
     ".html": "text/html; charset=utf-8",
     ".css": "text/css; charset=utf-8",
@@ -138,6 +144,16 @@ class Reglages:
             return profils.lire_lignes(chemin)
         except profils.ErreurProfil as erreur:
             raise ErreurRequete(422, str(erreur)) from erreur
+
+    def est_protege(self, nom: str) -> bool:
+        """Dit si un profil refuse d'être supprimé.
+
+        La page l'apprend d'ici plutôt que de le savoir : une liste de profils
+        intouchables recopiée dans le navigateur finirait par diverger de celle
+        qui commande vraiment, et un bouton grisé à tort vaut un bouton actif à
+        tort.
+        """
+        return nom in PROFILS_PROTEGES
 
     def exporter(self, nom: str) -> str:
         chemin = self.chemin(nom)
@@ -296,6 +312,43 @@ class Reglages:
         ]
         return self.enregistrer(nom, lignes)
 
+    def creer(self, nom: str, texte_csv: str) -> list[profils.Refus]:
+        """Ajoute un profil au dossier, sans jamais en recouvrir un existant.
+
+        Distincte d'`importer`, qui remplace : ce sont deux gestes que rien ne
+        rattrape s'ils sont confondus, un profil éprouvé en séance et effacé par
+        le fichier de côté n'ayant pas de version antérieure où revenir. Le nom
+        vient de l'appelant plutôt que du contenu : un même CSV sert à plusieurs
+        profils, et c'est le nom de fichier qui les distingue.
+        """
+        if self.chemin(nom).exists():
+            raise ErreurRequete(
+                409,
+                f"le profil « {nom} » existe déjà : l'ouvrir puis « Importer » "
+                "pour remplacer son contenu, ou choisir un autre nom.",
+            )
+        return self.importer(nom, texte_csv)
+
+    def supprimer(self, nom: str) -> None:
+        """Retire un profil du dossier. Le repli ne s'y prête pas.
+
+        Rien n'est mis de côté : le fichier part pour de bon, comme il partirait
+        du Finder. C'est pourquoi la page demande confirmation, et pourquoi elle
+        propose l'export juste à côté.
+        """
+        chemin = self.chemin(nom)
+        if not chemin.exists():
+            raise ErreurRequete(404, f"profil inconnu : « {nom} »")
+        if self.est_protege(nom):
+            raise ErreurRequete(
+                403,
+                f"« {nom} » est le profil de repli : sans lui, une application "
+                "inconnue au premier plan laisserait la séance sans commande, et "
+                "la télécommande refuserait de démarrer. Le vider de ses lignes "
+                "est possible, le supprimer non.",
+            )
+        chemin.unlink()
+
 
 def _refus_en_json(refus: list[profils.Refus]) -> Reponse:
     return Reponse.json(
@@ -451,7 +504,17 @@ def _router(reglages: Reglages, methode: str, chemin: str, corps: bytes) -> Repo
         action = morceaux[1] if len(morceaux) > 1 else ""
 
         if not action and methode == "GET":
-            return Reponse.json({"nom": nom, "lignes": reglages.lire(nom)})
+            return Reponse.json(
+                {
+                    "nom": nom,
+                    "lignes": reglages.lire(nom),
+                    "protege": reglages.est_protege(nom),
+                }
+            )
+
+        if not action and methode == "DELETE":
+            reglages.supprimer(nom)
+            return Reponse.json({"supprime": nom})
 
         if not action and methode == "PUT":
             charge = _charge_json(corps)
@@ -468,5 +531,10 @@ def _router(reglages: Reglages, methode: str, chemin: str, corps: bytes) -> Repo
             if refus := reglages.importer(nom, corps.decode("utf-8", errors="replace")):
                 return _refus_en_json(refus)
             return Reponse.json({"importe": nom})
+
+        if action == "creer" and methode == "POST":
+            if refus := reglages.creer(nom, corps.decode("utf-8", errors="replace")):
+                return _refus_en_json(refus)
+            return Reponse.json({"cree": nom}, code=201)
 
     raise ErreurRequete(404, f"route inconnue : {methode} {chemin}")

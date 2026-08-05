@@ -136,7 +136,11 @@ L'interrupteur en tête de page lance et arrête la télécommande, profil épin
 
 Elle refuse d'écrire ce que le lancement refuserait : touche que le clavier ignore, action interne inventée, nom de commande en double, formulation qui sert déjà à une autre commande. Le refus dit la cause et la solution à côté du champ fautif, et le fichier reste intact. Le geste courant y est l'ajout d'une formulation ; les touches, elles, arrivent d'ordinaire par import d'un CSV rempli en amont.
 
-Un profil enregistré est pris sans rien redémarrer, l'outil relisant ses profils à chaque changement d'application.
+Trois boutons sous la liste des profils, à ne pas confondre. « Gabarit CSV » télécharge un fichier vide aux bons en-têtes, à remplir dans un tableur ou par un agent. « + Un profil » ajoute autant de profils qu'on veut, chacun nommé d'après le fichier choisi et sans toucher aux autres ; si le nom est déjà pris, le remplacement est proposé au lieu d'être fait. « Importer » remplace le contenu du profil ouvert. Les deux passent par les mêmes contrôles : un CSV refusé n'écrit aucun fichier.
+
+« Supprimer », en tête du profil ouvert, efface son fichier après confirmation. Rien n'est mis de côté, d'où l'export à côté pour en garder une copie. Le profil `defaut` fait exception et son bouton reste inerte : c'est le repli sur les applications inconnues, et la télécommande refuse de démarrer sans lui. Le vider de ses lignes reste possible.
+
+Un profil enregistré n'est pris qu'au démarrage suivant de la télécommande : elle bâtit sa grammaire au lancement et garde en mémoire ce qu'elle a lu. L'arrêter et la relancer par l'interrupteur suffit.
 
 ## Installer sur un autre Mac
 

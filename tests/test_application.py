@@ -26,7 +26,7 @@ def test_le_bundle_de_canva_choisit_le_profil_canva() -> None:
 
 def test_application_inconnue_replie_sur_defaut() -> None:
     tous = profils.charger_tous(DOSSIER_PROFILS)
-    assert profils.profil_pour_bundle(tous, "com.google.Chrome").nom == "defaut"
+    assert profils.profil_pour_bundle(tous, "com.apple.TextEdit").nom == "defaut"
     assert profils.profil_pour_bundle(tous, "").nom == "defaut"
 
 
